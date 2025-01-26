@@ -182,14 +182,14 @@ For each point, use direct quotes from the responses to support your analysis. F
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
-          message: analysisPrompt,
-          model: "deepseek"
+          prompt: analysisPrompt,
+          models: ["deepseek"]
         })
       })
       
       const data = await response.json()
-      if (response.ok) {
-        setAnalysis(data.response.content)
+      if (response.ok && data.deepseek) {
+        setAnalysis(data.deepseek.content)
       }
     } catch (error) {
       console.error("Error generating analysis:", error)
@@ -208,77 +208,30 @@ For each point, use direct quotes from the responses to support your analysis. F
     if (!prompt) return
 
     try {
-      // First, get Deepseek's response to get both content and reasoning
-      console.log('Fetching Deepseek response...')
-      const deepseekResponse = await fetch("/api/chat", {
+      // First, get all responses in parallel
+      console.log('Fetching responses...')
+      const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: prompt.prompt, model: "deepseek" })
+        body: JSON.stringify({ 
+          prompt: prompt.prompt,
+          models: ["deepseek", "claude", "claude_reasoning"]
+        })
       })
-      const deepseekData = await deepseekResponse.json()
-      if (!deepseekResponse.ok) {
-        throw new Error(`Error from Deepseek: ${deepseekData.error || 'Unknown error'}`)
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(`Error fetching responses: ${data.error || 'Unknown error'}`)
       }
-      console.log('Deepseek response:', deepseekData)
 
-      // Store Deepseek's response and reasoning
-      const deepseekContent = deepseekData.response.content
-      const deepseekReasoning = deepseekData.response.reasoning
-
-      // Get Claude's basic response
-      console.log('Fetching Claude response...')
-      const claudeResponse = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: prompt.prompt, model: "claude" })
-      })
-      const claudeData = await claudeResponse.json()
-      if (!claudeResponse.ok) {
-        throw new Error(`Error from Claude: ${claudeData.error || 'Unknown error'}`)
-      }
-      console.log('Claude response:', claudeData)
-
-      // Get Claude's response with Deepseek's reasoning
-      console.log('Fetching Claude + Reasoning response...')
-      const enhancedPrompt = `I want you to consider this question carefully: "${prompt.prompt}"
-
-Here's a step-by-step reasoning process to consider:
-${deepseekReasoning}
-
-Based on this reasoning process, please provide a comprehensive and accurate response. 
-Your response should be clear and direct, incorporating the insights from the reasoning while maintaining a natural conversational tone.
-You don't need to explicitly reference the reasoning steps - just use them to inform your response.`
-
-      const claudeReasoningResponse = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: enhancedPrompt, model: "claude" })
-      })
-      const claudeReasoningData = await claudeReasoningResponse.json()
-      if (!claudeReasoningResponse.ok) {
-        throw new Error(`Error from Claude + Reasoning: ${claudeReasoningData.error || 'Unknown error'}`)
-      }
-      console.log('Claude + Reasoning response:', claudeReasoningData)
-
-      // Update responses state with all three responses
-      const newResponses: ComparisonState = {
-        deepseek: {
-          content: deepseekContent,
-          reasoning: deepseekReasoning
-        },
-        claude: {
-          content: claudeData.response.content,
-          reasoning: null
-        },
-        claude_reasoning: {
-          content: claudeReasoningData.response.content,
-          reasoning: deepseekReasoning // Reuse Deepseek's reasoning
-        }
-      }
-      setResponses(newResponses)
+      const data = await response.json()
+      console.log('Responses:', data)
+      setResponses(data)
 
       // Generate comparative analysis
-      await getComparativeAnalysis(newResponses, prompt.prompt)
+      if (data.deepseek && data.claude && data.claude_reasoning) {
+        await getComparativeAnalysis(data, prompt.prompt)
+      }
     } catch (error) {
       console.error("Error fetching responses:", error)
     } finally {
