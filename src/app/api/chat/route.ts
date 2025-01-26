@@ -3,7 +3,7 @@ import { NextResponse } from "next/server"
 const CLAUDE_API_KEY = process.env.CLAUDE_API_KEY
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY
 
-const TIMEOUT = 55000 // 55 seconds, just under Vercel's 60s limit
+const TIMEOUT = 290000 // 290 seconds, just under Vercel's 300s limit
 
 async function fetchWithTimeout(promise: Promise<any>) {
   const timeout = new Promise((_, reject) => {
@@ -207,28 +207,26 @@ export async function POST(req: Request) {
       await Promise.all(
         models.map(async (model) => {
           try {
-            console.log(`Fetching response for ${model}...`)
-            const response = await fetchWithTimeout(
-              fetch(`/api/${model}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ prompt })
-              })
-            )
-
-            if (!response.ok) {
-              throw new Error(`Error from ${model}: ${response.statusText}`)
+            console.log(`Processing ${model} request...`)
+            let response;
+            
+            switch (model) {
+              case "claude":
+                response = await callClaude(prompt);
+                break;
+              case "deepseek":
+                response = await callDeepseek(prompt);
+                break;
+              case "claude_reasoning":
+                response = await claudeWithReasoning(prompt);
+                break;
+              default:
+                throw new Error(`Unsupported model: ${model}`);
             }
 
-            const data = await response.json()
-            console.log(`Response for ${model}:`, data)
-
-            newResponses[model] = {
-              content: data.content || data,
-              reasoning: data.reasoning || null
-            }
+            newResponses[model] = response;
           } catch (error: any) {
-            console.error(`Error fetching ${model} response:`, error)
+            console.error(`Error processing ${model} response:`, error)
             newResponses[model] = {
               content: `Error: ${error.message}`,
               reasoning: null
