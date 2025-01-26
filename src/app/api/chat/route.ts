@@ -3,6 +3,18 @@ import { NextResponse } from "next/server"
 const CLAUDE_API_KEY = process.env.CLAUDE_API_KEY
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY
 
+const TIMEOUT = 55000 // 55 seconds, just under Vercel's 60s limit
+
+async function fetchWithTimeout(promise: Promise<any>) {
+  const timeout = new Promise((_, reject) => {
+    setTimeout(() => {
+      reject(new Error('Request timed out'))
+    }, TIMEOUT)
+  })
+  
+  return Promise.race([promise, timeout])
+}
+
 async function callClaude(message: string) {
   try {
     if (!CLAUDE_API_KEY) {
@@ -124,7 +136,7 @@ async function callDeepseek(message: string) {
         reasoning: data.choices[0].message.reasoning_content || null
       }
       
-    } catch (error: unknown) {
+    } catch (error: any) {
       if (error instanceof Error) {
         if (error.name === 'AbortError') {
           throw new Error("Request timed out after 30 seconds")
@@ -180,65 +192,64 @@ You don't need to explicitly reference the reasoning steps - just use them to in
 
 export async function POST(req: Request) {
   try {
-    const { message, model } = await req.json()
-
-    if (!message) {
-      return new NextResponse("Message is required", { status: 400 })
-    }
-
-    if ((model === "claude" || model === "claude_reasoning") && !CLAUDE_API_KEY) {
-      return new NextResponse(
-        JSON.stringify({ error: "Claude API key not configured" }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } }
+    const { prompt, models } = await req.json()
+    
+    if (!prompt || !models || !Array.isArray(models)) {
+      return NextResponse.json(
+        { error: 'Invalid request format' },
+        { status: 400 }
       )
     }
 
-    if (model === "deepseek" && !DEEPSEEK_API_KEY) {
-      return new NextResponse(
-        JSON.stringify({ error: "Deepseek API key not configured" }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } }
+    const newResponses: Record<string, any> = {}
+
+    try {
+      await Promise.all(
+        models.map(async (model) => {
+          try {
+            console.log(`Fetching response for ${model}...`)
+            const response = await fetchWithTimeout(
+              fetch(`/api/${model}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt })
+              })
+            )
+
+            if (!response.ok) {
+              throw new Error(`Error from ${model}: ${response.statusText}`)
+            }
+
+            const data = await response.json()
+            console.log(`Response for ${model}:`, data)
+
+            newResponses[model] = {
+              content: data.content || data,
+              reasoning: data.reasoning || null
+            }
+          } catch (error: any) {
+            console.error(`Error fetching ${model} response:`, error)
+            newResponses[model] = {
+              content: `Error: ${error.message}`,
+              reasoning: null
+            }
+          }
+        })
+      )
+
+      return NextResponse.json(newResponses)
+    } catch (error) {
+      console.error('Error processing responses:', error)
+      return NextResponse.json(
+        { error: 'Error processing responses' },
+        { status: 500 }
       )
     }
-
-    console.log(`Processing ${model} request:`, message.slice(0, 50))
-
-    let response
-    switch (model) {
-      case "claude":
-        response = await callClaude(message)
-        break
-      case "deepseek":
-        response = await callDeepseek(message)
-        break
-      case "claude_reasoning":
-        response = await claudeWithReasoning(message)
-        break
-      default:
-        throw new Error(`Unsupported model: ${model}`)
-    }
-
-    return NextResponse.json({
-      response,
-      conversationId: "test-conversation"
-    })
   } catch (error) {
-    console.error("API Error:", {
-      name: error instanceof Error ? error.name : "Unknown",
-      message: error instanceof Error ? error.message : "Unknown error",
-      stack: error instanceof Error ? error.stack : undefined
-    })
-
-    return new NextResponse(
-      JSON.stringify({ 
-        error: "API Error",
-        details: error instanceof Error ? error.message : "Unknown error"
-      }), 
-      { 
-        status: 500,
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      }
+    console.error('API error:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
     )
   }
 }
