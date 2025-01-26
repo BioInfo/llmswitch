@@ -1,4 +1,4 @@
-# Project Roadmap
+# Project Roadmap - MVP Version
 
 ## High-Level Goals
 - [x] Create a comparison interface for multiple LLM responses
@@ -41,16 +41,19 @@
 - [x] Better handling of mathematical expressions
 - [x] Streamlined comparative analysis display
 
-## Future Enhancements
-- [ ] Add more model comparisons
+## Future Enhancements (Post-MVP)
+- [ ] Add persistent storage capabilities
+- [ ] Implement user authentication
+- [ ] Add conversation history
+- [ ] Enable response saving
+- [ ] Add export functionality
 - [ ] Implement user feedback collection
-- [ ] Add export functionality for comparisons
-- [ ] Enhance error recovery mechanisms
 - [ ] Add customizable prompt templates
 
-## Completion Criteria
-- [x] All core features implemented and tested
+## MVP Completion Criteria
+- [x] Core comparison features implemented and tested
 - [x] UI/UX polished and responsive
 - [x] Text rendering clean and consistent
 - [x] Performance optimized
 - [x] Documentation updated
+- [x] Ready for Vercel deployment

@@ -1,4 +1,4 @@
-# Technology Stack
+# Technology Stack - MVP Version
 
 ## Frontend
 - **Framework**: Next.js 14+ with React
@@ -68,7 +68,14 @@
 - Error handling and logging
 
 ## Deployment
-- Vercel-ready configuration
+- Vercel deployment configuration
 - Environment variable management
 - Build optimization
 - Cache management
+
+## Post-MVP Features (Planned)
+- Database integration
+- User authentication
+- Persistent storage
+- Response history
+- Export functionality
