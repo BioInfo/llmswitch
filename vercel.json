@@ -5,7 +5,7 @@
   "framework": "nextjs",
   "devCommand": "npm run dev",
   "functions": {
-    "api/**/*": {
+    "app/api/**/*": {
       "maxDuration": 300
     }
   },
