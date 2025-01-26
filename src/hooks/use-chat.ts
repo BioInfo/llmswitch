@@ -25,6 +25,29 @@ interface ApiResponse {
   [key: string]: ModelResponse
 }
 
+// Utility function to handle fetch with timeout
+const fetchWithTimeout = async (url: string, options: RequestInit, timeout = 295000) => {
+  const controller = new AbortController()
+  const id = setTimeout(() => controller.abort(), timeout)
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    })
+    clearTimeout(id)
+    return response
+  } catch (error) {
+    clearTimeout(id)
+    if (error instanceof Error) {
+      if (error.name === 'AbortError') {
+        throw new Error('Request timed out - the model is taking too long to respond. Please try again.')
+      }
+    }
+    throw error
+  }
+}
+
 export function useChat() {
   const [messages, setMessages] = useState<Message[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -55,7 +78,7 @@ export function useChat() {
     setMessages((prevMessages: Message[]) => [...prevMessages, userMessage])
 
     try {
-      const response = await fetch("/api/chat", {
+      const response = await fetchWithTimeout("/api/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -77,7 +100,9 @@ export function useChat() {
         data = JSON.parse(text)
       } catch (e) {
         console.error('Failed to parse response:', text)
-        throw new Error(`Invalid response format: ${text.slice(0, 100)}...`)
+        throw new Error(text.includes('FUNCTION_INVOCATION_TIMEOUT') 
+          ? 'The request timed out. The model is taking too long to respond. Please try again with a shorter prompt.'
+          : `Invalid response format: ${text.slice(0, 100)}...`)
       }
 
       if (!response.ok) {

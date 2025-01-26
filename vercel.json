@@ -1,11 +1,11 @@
 {
+  "version": 2,
   "buildCommand": "npm run build",
   "installCommand": "npm install",
   "framework": "nextjs",
   "devCommand": "npm run dev",
   "functions": {
-    "app/api/**": {
-      "memory": 3008,
+    "api/**/*": {
       "maxDuration": 300
     }
   },
