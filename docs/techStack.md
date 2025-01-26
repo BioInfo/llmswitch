@@ -1,71 +1,74 @@
-# Technology Stack and Architecture Decisions
+# Technology Stack
 
-## Frontend Tools
-- **Framework**: Next.js 14+
-  - Server Components for improved performance
-  - App Router for modern routing
-  - React Server Actions for form handling
-- **Styling**: Tailwind CSS + ShadcnUI
-  - Consistent design system
-  - Built-in dark mode support
-  - Customizable components
-- **Animations**: Framer Motion
-  - Smooth page transitions
-  - Micro-interactions
-  - Performance-optimized animations
+## Frontend
+- **Framework**: Next.js 14+ with React
+- **Language**: TypeScript
+- **Styling**: 
+  - Tailwind CSS for utility-first styling
+  - ShadCN UI for component library
+  - Custom animations and transitions
+- **State Management**: React hooks and context
+- **Components**:
+  - Custom loading states with animations
+  - Collapsible sections with smooth transitions
+  - Responsive grid layouts
+  - Interactive cards with hover states
 
-## Backend Tools
-- **Runtime**: Node.js 18+
-- **API Routes**: Next.js API routes
-- **Database**: SQLite + Prisma ORM
-  - Local development simplicity
-  - Zero-config setup
-  - Type-safe database queries
+## Backend
+- **Runtime**: Next.js API routes
+- **Model Integration**:
+  - Deepseek R1 for primary responses and analysis
+  - Claude 3 Sonnet for comparison responses
+  - Custom reasoning enhancement pipeline
 
-## State Management
-- **Server State**: TanStack Query
-  - Automatic caching
-  - Background revalidation
-  - Optimistic updates
-- **Local State**: React Context + useState
-  - Theme preferences
-  - UI state
-  - LLM provider selection
+## Features
+
+### Response Processing
+- Text cleaning and formatting
+- Mathematical expression handling
+- LaTeX conversion
+- Whitespace normalization
+- Sentence and paragraph structuring
+
+### Comparative Analysis
+- Structured analysis format
+- Section-based organization
+- Bullet point hierarchies
+- Visual hierarchy with gradients and spacing
+
+### UI/UX Elements
+- Engaging loading states
+- Collapsible reasoning sections
+- Interactive prompt selection
+- Clean typography and spacing
+- Responsive design at all breakpoints
 
 ## Development Tools
-- **Language**: TypeScript
-  - Strict type checking
-  - Enhanced IDE support
-  - Better code maintainability
-- **Testing**: Jest + React Testing Library
-  - Unit tests
-  - Integration tests
-  - Component testing
-- **Linting**: ESLint + Prettier
-  - Consistent code style
-  - Automatic formatting
-  - Best practices enforcement
-
-## API Integration
-- **LLM Providers**:
-  - Deepseek API
-  - Claude API
-  - Error handling middleware
-  - Rate limiting
-- **Authentication**:
+- **Version Control**: Git
+- **Code Quality**:
+  - TypeScript for type safety
+  - ESLint for code linting
+  - Prettier for code formatting
+- **Development Environment**:
+  - VS Code with recommended extensions
   - Environment variables for API keys
-  - Secure key storage
-  - Request validation
+  - Hot reloading for rapid development
 
-## Performance Optimization
-- Server Components
-- Image optimization
-- Dynamic imports
-- Edge caching
-- Bundle size optimization
+## Performance Optimizations
+- Client-side state management
+- Efficient text processing
+- Optimized re-renders
+- Lazy loading of content
+- Smooth animations and transitions
+
+## Security
+- Environment variable protection
+- API key management
+- Rate limiting
+- Error handling and logging
 
 ## Deployment
-- Vercel platform
+- Vercel-ready configuration
 - Environment variable management
-- Continuous deployment
-- Performance monitoring
+- Build optimization
+- Cache management
