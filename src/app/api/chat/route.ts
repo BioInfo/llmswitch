@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server"
+import { callClaude } from "@/lib/claude"
+import { callDeepseek } from "@/lib/deepseek"
+import { claudeWithReasoning } from "@/lib/claude-reasoning"
 
 const CLAUDE_API_KEY = process.env.CLAUDE_API_KEY
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY
@@ -190,64 +193,71 @@ You don't need to explicitly reference the reasoning steps - just use them to in
   }
 }
 
+export const maxDuration = 300 // Set max duration to 300 seconds
+
 export async function POST(req: Request) {
   try {
     const { prompt, models } = await req.json()
-    
+
     if (!prompt || !models || !Array.isArray(models)) {
       return NextResponse.json(
-        { error: 'Invalid request format' },
+        { error: "Invalid request format - missing prompt or models array" },
         { status: 400 }
       )
     }
 
+    console.log(`Processing request for models: ${models.join(", ")}`)
     const newResponses: Record<string, any> = {}
 
     try {
       await Promise.all(
         models.map(async (model) => {
+          console.log(`Fetching response for ${model}...`)
+          let response
+          
           try {
-            console.log(`Processing ${model} request...`)
-            let response;
-            
             switch (model) {
               case "claude":
-                response = await callClaude(prompt);
-                break;
+                response = await callClaude(prompt)
+                break
               case "deepseek":
-                response = await callDeepseek(prompt);
-                break;
+                response = await callDeepseek(prompt)
+                break
               case "claude_reasoning":
-                response = await claudeWithReasoning(prompt);
-                break;
+                response = await claudeWithReasoning(prompt)
+                break
               default:
-                throw new Error(`Unsupported model: ${model}`);
+                throw new Error(`Unknown model: ${model}`)
             }
-
-            newResponses[model] = response;
-          } catch (error: any) {
-            console.error(`Error processing ${model} response:`, error)
-            newResponses[model] = {
-              content: `Error: ${error.message}`,
-              reasoning: null
-            }
+            
+            console.log(`Got response for ${model}:`, response)
+            newResponses[model] = response
+          } catch (error) {
+            console.error(`Error fetching response from ${model}:`, error)
+            throw error
           }
         })
       )
 
-      return NextResponse.json(newResponses)
+      return NextResponse.json(newResponses, {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+        },
+      })
     } catch (error) {
-      console.error('Error processing responses:', error)
+      console.error("Error processing models:", error)
       return NextResponse.json(
-        { error: 'Error processing responses' },
+        { error: `Error processing models: ${error instanceof Error ? error.message : String(error)}` },
         { status: 500 }
       )
     }
   } catch (error) {
-    console.error('API error:', error)
+    console.error("API route error:", error)
     return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
+      { error: "Invalid request format or server error" },
+      { status: 400 }
     )
   }
 }
