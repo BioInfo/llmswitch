@@ -12,7 +12,7 @@ export default function Home() {
             LLMSwitch
           </h1>
           <p className="max-w-[600px] text-muted-foreground">
-            Seamlessly chat with Deepseek and Claude LLMs
+            Seamlessly chat with Deepseek R1 and Claude LLMs
           </p>
         </div>
         

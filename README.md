@@ -1,92 +1,105 @@
 # LLMSwitch
 
-A modern React/Next.js application for seamlessly switching between Deepseek and Claude LLMs with a sleek chat interface.
+A modern interface for comparing and analyzing responses from multiple Large Language Models. Made with ❤️ by [J&S Group, LLC](https://jsgroup.llc).
 
 ## Features
 
-- 🎨 Modern UI with smooth transitions and responsive layout
-- 🔄 Easy switching between Deepseek and Claude LLMs
-- 💾 Persistent chat history with SQLite
-- 🚀 Built with Next.js 14 and TypeScript
-- 🎯 Real-time chat interface
-- 🔒 Secure API key management
-- ♿ Accessibility compliant
-- 🌙 Dark mode support
+### Model Comparison
+- Compare responses from multiple LLMs (Deepseek R1, Claude 3 Sonnet)
+- Enhanced responses using combined reasoning approaches
+- Structured comparative analysis of differences and similarities
+- Six diverse prompt categories for testing different capabilities
 
-## Tech Stack
+### Interactive UI
+- Clean, modern interface built with Next.js and Tailwind CSS
+- Engaging loading states with AI-themed jokes
+- Collapsible reasoning sections
+- Responsive grid layouts
+- Visual hierarchy with gradient accents
 
-- **Framework:** Next.js 14 with TypeScript
-- **Styling:** Tailwind CSS + shadcn/ui
-- **Database:** SQLite with Prisma ORM
-- **State Management:** React Query + Context
-- **UI Components:** Radix UI primitives
-- **Animations:** Framer Motion
+### Advanced Text Processing
+- Intelligent handling of mathematical expressions
+- Clean formatting of responses and analysis
+- LaTeX conversion and normalization
+- Smart spacing and paragraph structuring
+
+### Comparative Analysis
+- Automated analysis of response differences
+- Structured evaluation of approaches
+- Identification of unique strengths
+- Effectiveness assessment
 
 ## Getting Started
 
+### Prerequisites
+- Node.js 18+
+- API keys for:
+  - Anthropic Claude
+  - Deepseek
+
+### Installation
 1. Clone the repository:
 ```bash
-git clone <repository-url>
+git clone https://github.com/yourusername/llmswitch.git
 cd llmswitch
 ```
 
 2. Install dependencies:
 ```bash
-pnpm install
+npm install
 ```
 
 3. Set up environment variables:
 ```bash
-cp .env.example .env
+cp .env.example .env.local
 ```
+Add your API keys to `.env.local`
 
-4. Add your API keys to `.env`:
-```
-CLAUDE_API_KEY=your-claude-api-key
-DEEPSEEK_API_KEY=your-deepseek-api-key
-```
-
-5. Initialize the database:
+4. Run the development server:
 ```bash
-pnpm prisma generate
-pnpm prisma db push
+npm run dev
 ```
 
-6. Start the development server:
-```bash
-pnpm dev
-```
+## Usage
 
-Visit `http://localhost:3000` to see the application.
+1. Select a prompt category from the comparison page
+2. View responses from different models
+3. Toggle reasoning sections for deeper insights
+4. Explore the comparative analysis
+5. Use the findings to understand model strengths and differences
 
-## Project Structure
+## Technology Stack
 
-```
-src/
-├── app/              # Next.js App Router pages and layouts
-├── components/       # React components
-│   ├── chat/        # Chat-specific components
-│   └── ui/          # Shared UI components
-├── lib/             # Utility functions and configurations
-└── hooks/           # Custom React hooks
-prisma/              # Database schema and migrations
-docs/               # Project documentation
-```
+- **Frontend**: Next.js 14+, React, TypeScript
+- **Styling**: Tailwind CSS, ShadCN UI
+- **State Management**: React hooks and context
+- **APIs**: Claude 3 Sonnet, Deepseek R1
 
-## Documentation
-
-- [Deployment Guide](docs/deployment.md)
+For more details, see:
 - [Project Roadmap](docs/projectRoadmap.md)
-- [Technical Stack](docs/techStack.md)
+- [Technical Documentation](docs/techStack.md)
+- [Comparison Feature](docs/comparisonFeature.md)
 
 ## Contributing
 
 1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+- Built with [Next.js](https://nextjs.org/)
+- UI components from [shadcn/ui](https://ui.shadcn.com/)
+- LLM providers:
+  - [Anthropic Claude](https://www.anthropic.com/)
+  - [Deepseek](https://deepseek.ai/)
+
+## About J&S Group
+
+LLMSwitch is developed and maintained by J&S Group, LLC, a technology company focused on building innovative AI tools and solutions. For more information, visit [our website](https://jsgroup.llc).

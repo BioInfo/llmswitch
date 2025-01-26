@@ -2,12 +2,13 @@
 
 import { useState, useCallback } from "react"
 
-export type ModelType = "claude" | "deepseek"
+export type ModelType = "claude" | "deepseek" | "claude_reasoning"
 
 interface Message {
   id: string
   content: string
   role: "user" | "assistant"
+  reasoning?: string | null
 }
 
 interface ApiError {
@@ -65,7 +66,8 @@ export function useChat() {
       
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
-        content: data.response,
+        content: data.response.content || data.response,
+        reasoning: data.response.reasoning || null,
         role: "assistant"
       }
 

@@ -68,8 +68,31 @@ export function ChatInterface() {
               </div>
             </div>
           )}
-          <div className="h-[calc(100%-80px)] overflow-auto rounded-md border bg-muted/50 p-4">
-            <MessageList messages={messages} />
+          <div className="flex gap-4 h-[calc(100%-80px)]">
+            <div className="flex-1 overflow-auto rounded-md border bg-muted/50 p-4">
+              <MessageList messages={messages} />
+            </div>
+            {(selectedModel === "deepseek" || selectedModel === "claude_reasoning") && (
+              <div className="w-80 overflow-auto rounded-md border bg-muted/50 p-4">
+                <div className="sticky top-0 bg-muted/50 pb-2 mb-2 border-b">
+                  <h4 className="font-semibold text-sm">
+                    {selectedModel === "deepseek" ? "Reasoning Process" : "Enhanced with Reasoning"}
+                  </h4>
+                </div>
+                <div className="space-y-4 text-sm">
+                  {messages.map((message) => (
+                    message.reasoning && (
+                      <div key={message.id} className="prose prose-sm max-w-none">
+                        <div className="text-xs text-muted-foreground mb-1">
+                          For message: {message.content.slice(0, 50)}...
+                        </div>
+                        {message.reasoning}
+                      </div>
+                    )
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           <div className="relative">
             {isLoading && (

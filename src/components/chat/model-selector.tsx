@@ -21,7 +21,11 @@ const models = [
   },
   {
     value: "deepseek" as ModelType,
-    label: "Deepseek",
+    label: "Deepseek R1",
+  },
+  {
+    value: "claude_reasoning" as ModelType,
+    label: "Claude + Reasoning",
   },
 ]
 
