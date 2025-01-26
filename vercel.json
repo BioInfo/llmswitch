@@ -4,7 +4,7 @@
   "framework": "nextjs",
   "devCommand": "npm run dev",
   "functions": {
-    "api/chat": {
+    "app/api/**": {
       "memory": 1024,
       "maxDuration": 60
     }
