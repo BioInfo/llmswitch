@@ -93,5 +93,4 @@ npm run dev
 Feel free to reach out if you have any questions. The J&S Group team is here to help! You can:
 
 - Open an issue on GitHub
-- Contact us through our [website](https://jsgroup.llc)
-- Email us at support@jsgroup.llc 
+- Contact us through our [website](https://jandsgroupllc.com)

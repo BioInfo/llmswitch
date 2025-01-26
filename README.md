@@ -1,6 +1,6 @@
 # LLMSwitch
 
-A modern interface for comparing and analyzing responses from multiple Large Language Models. Made with ❤️ by [J&S Group, LLC](https://jsgroup.llc).
+A modern interface for comparing and analyzing responses from multiple Large Language Models. Made with ❤️ by [J&S Group, LLC](https://jandsgroupllc.com).
 
 ## Features
 
@@ -102,4 +102,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## About J&S Group
 
-LLMSwitch is developed and maintained by J&S Group, LLC, a technology company focused on building innovative AI tools and solutions. For more information, visit [our website](https://jsgroup.llc).
+LLMSwitch is developed and maintained by J&S Group, LLC, a technology company focused on building innovative AI tools and solutions. For more information, visit [our website](https://jandsgroupllc.com).
