@@ -1,24 +1,16 @@
 import { NextResponse } from "next/server"
-import { callClaude } from "@/lib/claude"
-import { callDeepseek } from "@/lib/deepseek"
-import { claudeWithReasoning } from "@/lib/claude-reasoning"
 
 const CLAUDE_API_KEY = process.env.CLAUDE_API_KEY
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY
 
 const TIMEOUT = 290000 // 290 seconds, just under Vercel's 300s limit
 
-async function fetchWithTimeout(promise: Promise<any>) {
-  const timeout = new Promise((_, reject) => {
-    setTimeout(() => {
-      reject(new Error('Request timed out'))
-    }, TIMEOUT)
-  })
-  
-  return Promise.race([promise, timeout])
+interface ModelResponse {
+  content: string
+  reasoning: string | null
 }
 
-async function callClaude(message: string) {
+async function callClaude(message: string): Promise<ModelResponse> {
   try {
     if (!CLAUDE_API_KEY) {
       throw new Error("Claude API key not configured")
@@ -26,44 +18,51 @@ async function callClaude(message: string) {
 
     console.log("Using Claude API key:", CLAUDE_API_KEY?.slice(0, 10) + "...")
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": CLAUDE_API_KEY,
-        "anthropic-version": "2023-06-01" // Required header
-      },
-      body: JSON.stringify({
-        model: "claude-3-sonnet-20240229",
-        max_tokens: 1024,
-        temperature: 0.7,
-        messages: [
-          {
-            role: "user",
-            content: message
-          }
-        ]
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT)
+
+    try {
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": CLAUDE_API_KEY,
+          "anthropic-version": "2023-06-01"
+        },
+        body: JSON.stringify({
+          model: "claude-3-sonnet-20240229",
+          max_tokens: 4096,
+          messages: [{ role: "user", content: message }]
+        }),
+        signal: controller.signal
       })
-    })
 
-    if (!response.ok) {
-      const errorBody = await response.text()
-      throw new Error(`Claude API error: ${response.status} ${response.statusText} - ${errorBody}`)
-    }
+      clearTimeout(timeoutId)
 
-    console.log("Claude API response status:", response.status)
-    const data = await response.json()
-    console.log("Claude API response data:", data)
-    
-    if (!data.content?.[0]?.text) {
-      console.error("Unexpected Claude API response:", data)
-      throw new Error("Invalid response format from Claude API")
-    }
+      if (!response.ok) {
+        const errorBody = await response.text()
+        throw new Error(`Claude API error: ${response.status} ${response.statusText} - ${errorBody}`)
+      }
 
-    // Return in the same format as Deepseek for consistency
-    return {
-      content: data.content[0].text,
-      reasoning: null
+      const data = await response.json()
+      
+      if (!data.content?.[0]?.text) {
+        console.error("Unexpected Claude API response:", data)
+        throw new Error("Invalid response format from Claude API")
+      }
+
+      return {
+        content: data.content[0].text,
+        reasoning: null
+      }
+    } catch (error) {
+      clearTimeout(timeoutId)
+      if (error instanceof Error) {
+        if (error.name === "AbortError") {
+          throw new Error("Claude API request timed out after 290 seconds")
+        }
+      }
+      throw error
     }
   } catch (error) {
     console.error("Claude API error:", error)
@@ -71,24 +70,16 @@ async function callClaude(message: string) {
   }
 }
 
-async function callDeepseek(message: string) {
+async function callDeepseek(message: string): Promise<ModelResponse> {
   try {
-    console.log("Attempting Deepseek API call with key:", DEEPSEEK_API_KEY?.slice(0, 10) + "...")
-    
     if (!DEEPSEEK_API_KEY) {
       throw new Error("Deepseek API key not configured")
     }
 
-    const requestBody = {
-      model: "deepseek-reasoner",
-      messages: [{ role: "user", content: message }],
-      max_tokens: 4096 // Default for reasoner model
-    }
-    
-    console.log("Deepseek request body:", JSON.stringify(requestBody))
+    console.log("Using Deepseek API key:", DEEPSEEK_API_KEY?.slice(0, 10) + "...")
 
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT)
 
     try {
       const response = await fetch("https://api.deepseek.com/v1/chat/completions", {
@@ -98,7 +89,11 @@ async function callDeepseek(message: string) {
           "Authorization": `Bearer ${DEEPSEEK_API_KEY}`,
           "Accept": "application/json"
         },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify({
+          model: "deepseek-reasoner",
+          messages: [{ role: "user", content: message }],
+          max_tokens: 4096
+        }),
         signal: controller.signal,
         cache: 'no-cache'
       })
@@ -107,51 +102,37 @@ async function callDeepseek(message: string) {
 
       if (!response.ok) {
         const errorBody = await response.text()
-        console.error("Deepseek API error response:", {
-          status: response.status,
-          statusText: response.statusText,
-          body: errorBody
-        })
         throw new Error(`Deepseek API error: ${response.status} ${response.statusText} - ${errorBody}`)
       }
 
       const data = await response.json()
-      console.log("Deepseek API response:", data)
       
-      // Handle the reasoner model's specific response format
       if (!data.choices?.[0]?.message?.content) {
-        console.error("Unexpected Deepseek API response format:", data)
+        console.error("Unexpected Deepseek API response:", data)
         throw new Error("Invalid response format from Deepseek API")
       }
-      
+
       // Clean up response formatting
       let cleanedContent = data.choices[0].message.content
-        .replace(/\\\(|\\\)/g, '') // Remove LaTeX delimiters
-        .replace(/\\boxed{([^}]+)}/g, '$1') // Remove boxed formatting
-        .replace(/\*\*Answer:\*\*|\*\*/g, '') // Remove markdown bold and "Answer:" text
-        .replace(/\\times/g, 'x') // Replace LaTeX multiplication
-        .replace(/\\frac{([^}]+)}{([^}]+)}/g, '$1/$2') // Convert fractions to simple division
+        .replace(/\\\(|\\\)/g, '')
+        .replace(/\\boxed{([^}]+)}/g, '$1')
+        .replace(/\*\*Answer:\*\*|\*\*/g, '')
+        .replace(/\\times/g, 'x')
+        .replace(/\\frac{([^}]+)}{([^}]+)}/g, '$1/$2')
         .trim()
-      
-      // Return both content and reasoning in a structured format
+
       return {
         content: cleanedContent,
         reasoning: data.choices[0].message.reasoning_content || null
       }
-      
-    } catch (error: any) {
+    } catch (error) {
+      clearTimeout(timeoutId)
       if (error instanceof Error) {
-        if (error.name === 'AbortError') {
-          throw new Error("Request timed out after 30 seconds")
-        }
-        if (error instanceof TypeError && error.message.includes('fetch failed')) {
-          console.error("Network error details:", error)
-          throw new Error("Failed to connect to Deepseek API. Please check your network connection and API endpoint.")
+        if (error.name === "AbortError") {
+          throw new Error("Deepseek API request timed out after 290 seconds")
         }
       }
       throw error
-    } finally {
-      clearTimeout(timeoutId)
     }
   } catch (error) {
     console.error("Deepseek API error:", error)
@@ -159,33 +140,63 @@ async function callDeepseek(message: string) {
   }
 }
 
-async function claudeWithReasoning(message: string) {
+async function claudeWithReasoning(message: string): Promise<ModelResponse> {
   try {
-    // First, get reasoning from Deepseek
-    const deepseekResponse = await callDeepseek(message)
-    const reasoning = deepseekResponse.reasoning
-
-    if (!reasoning) {
-      throw new Error("No reasoning generated from Deepseek")
+    if (!CLAUDE_API_KEY) {
+      throw new Error("Claude API key not configured")
     }
 
-    // Construct enhanced prompt for Claude using RAT methodology
-    const enhancedPrompt = `I want you to consider this question carefully: "${message}"
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT)
 
-Here's a step-by-step reasoning process to consider:
-${reasoning}
+    try {
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": CLAUDE_API_KEY,
+          "anthropic-version": "2023-06-01"
+        },
+        body: JSON.stringify({
+          model: "claude-3-sonnet-20240229",
+          max_tokens: 4096,
+          messages: [
+            { 
+              role: "user", 
+              content: `${message}\n\nPlease provide your response in two parts:\n1. Your direct answer\n2. Your reasoning process, including key considerations and assumptions`
+            }
+          ]
+        }),
+        signal: controller.signal
+      })
 
-Based on this reasoning process, please provide a comprehensive and accurate response. 
-Your response should be clear and direct, incorporating the insights from the reasoning while maintaining a natural conversational tone.
-You don't need to explicitly reference the reasoning steps - just use them to inform your response.`
+      clearTimeout(timeoutId)
 
-    // Call Claude with enhanced prompt
-    const claudeResponse = await callClaude(enhancedPrompt)
-    
-    // Return both the enhanced response and the reasoning that led to it
-    return {
-      content: claudeResponse.content,
-      reasoning: reasoning // Include the Deepseek reasoning that enhanced Claude's response
+      if (!response.ok) {
+        const errorBody = await response.text()
+        throw new Error(`Claude API error: ${response.status} ${response.statusText} - ${errorBody}`)
+      }
+
+      const data = await response.json()
+      const fullResponse = data.content[0].text
+      
+      // Split response into content and reasoning
+      const parts = fullResponse.split(/\n\s*2\.\s*(?:Your )?[Rr]easoning/)
+      const content = parts[0].replace(/1\.\s*(?:Your )?(?:[Dd]irect )?[Aa]nswer:?\s*/i, '').trim()
+      const reasoning = parts[1]?.trim() || null
+
+      return {
+        content,
+        reasoning
+      }
+    } catch (error) {
+      clearTimeout(timeoutId)
+      if (error instanceof Error) {
+        if (error.name === "AbortError") {
+          throw new Error("Claude API request timed out after 290 seconds")
+        }
+      }
+      throw error
     }
   } catch (error) {
     console.error("Claude with reasoning error:", error)
@@ -207,13 +218,13 @@ export async function POST(req: Request) {
     }
 
     console.log(`Processing request for models: ${models.join(", ")}`)
-    const newResponses: Record<string, any> = {}
+    const newResponses: Record<string, ModelResponse> = {}
 
     try {
       await Promise.all(
         models.map(async (model) => {
           console.log(`Fetching response for ${model}...`)
-          let response
+          let response: ModelResponse
           
           try {
             switch (model) {
