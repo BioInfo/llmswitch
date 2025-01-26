@@ -180,15 +180,34 @@ For each point, use direct quotes from the responses to support your analysis. F
 
       const response = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          "Pragma": "no-cache"
+        },
+        credentials: "same-origin",
+        cache: "no-store",
         body: JSON.stringify({ 
           prompt: analysisPrompt,
           models: ["deepseek"]
         })
       })
       
-      const data = await response.json()
-      if (response.ok && data.deepseek) {
+      // Handle non-JSON responses
+      const text = await response.text()
+      let data
+      try {
+        data = JSON.parse(text)
+      } catch (e) {
+        console.error('Failed to parse analysis response:', text)
+        throw new Error(`Invalid analysis response format: ${text.slice(0, 100)}...`)
+      }
+
+      if (!response.ok) {
+        throw new Error(`Error generating analysis: ${data.error || text || 'Unknown error'}`)
+      }
+
+      if (data.deepseek) {
         setAnalysis(data.deepseek.content)
       }
     } catch (error) {
@@ -212,19 +231,35 @@ For each point, use direct quotes from the responses to support your analysis. F
       console.log('Fetching responses...')
       const response = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          // Add cache control headers to prevent caching
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          "Pragma": "no-cache"
+        },
+        // Add credentials and cache settings
+        credentials: "same-origin",
+        cache: "no-store",
         body: JSON.stringify({ 
           prompt: prompt.prompt,
           models: ["deepseek", "claude", "claude_reasoning"]
         })
       })
 
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(`Error fetching responses: ${data.error || 'Unknown error'}`)
+      // Handle non-JSON responses
+      const text = await response.text()
+      let data
+      try {
+        data = JSON.parse(text)
+      } catch (e) {
+        console.error('Failed to parse response:', text)
+        throw new Error(`Invalid response format: ${text.slice(0, 100)}...`)
       }
 
-      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(`Error fetching responses: ${data.error || text || 'Unknown error'}`)
+      }
+
       console.log('Responses:', data)
       setResponses(data)
 
