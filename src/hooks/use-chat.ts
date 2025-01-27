@@ -1,10 +1,10 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 
 export type ModelType = "claude" | "deepseek" | "claude_reasoning"
 
-interface Message {
+export interface Message {
   id: string
   content: string
   role: "user" | "assistant"
@@ -124,7 +124,22 @@ export function useChat() {
         role: "assistant"
       }
 
-      setMessages((prevMessages: Message[]) => [...prevMessages, assistantMessage])
+      setMessages((prevMessages: Message[]) => [...prevMessages, assistantMessage]);
+
+      // Save messages to database
+      try {
+        await fetch("/api/messages", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ messages: [...messages, userMessage, assistantMessage] }),
+        });
+      } catch (dbError) {
+        console.error("Error saving message to database:", dbError);
+        setError("Failed to save chat history."); // Inform user about database save failure
+      }
+
     } catch (error) {
       console.error("Error sending message:", error)
       setError(error instanceof Error ? error.message : "An unexpected error occurred")
@@ -134,13 +149,49 @@ export function useChat() {
     } finally {
       setIsLoading(false)
     }
-  }, [selectedModel, isLoading])
+  }, [selectedModel, isLoading]);
 
-  const clearMessages = useCallback(() => {
-    setMessages([])
-    setError(null)
-    setIsLoading(false)
-  }, [])
+  const clearMessages = useCallback(async () => {
+    setMessages([]);
+    setError(null);
+    setIsLoading(false);
+
+    // Clear messages from database
+    try {
+      await fetch("/api/messages", {
+        method: "DELETE",
+      });
+    } catch (dbError) {
+      console.error("Error clearing messages from database:", dbError);
+      setError("Failed to clear chat history."); // Inform user about database clear failure
+    }
+  }, []);
+
+  const loadMessages = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/messages", {
+        method: "GET",
+      });
+      if (!response.ok) {
+        throw new Error(`Failed to load messages: ${response.status} ${response.statusText}`);
+      }
+      const data = await response.json();
+      if (data.messages) {
+        setMessages(data.messages);
+      }
+    } catch (dbError) {
+      console.error("Error loading messages from database:", dbError);
+      setError("Failed to load chat history.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadMessages();
+  }, [loadMessages]);
 
   return {
     messages,

@@ -16,6 +16,9 @@
 
 ## Backend
 - **Runtime**: Next.js API routes
+- **Database**:
+  - **Vercel Postgres**: Serverless PostgreSQL database for persistent storage. Chosen for its scalability, reliability, and tight integration with Vercel.
+    - **Schema**: Defined in `docs/databaseSchema.md`
 - **Model Integration**:
   - Deepseek R1 for primary responses and analysis
   - Claude 3 Sonnet for comparison responses

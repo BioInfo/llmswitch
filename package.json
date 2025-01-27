@@ -23,6 +23,7 @@
     "lucide-react": "0.474.0",
     "next": "14.1.0",
     "next-themes": "0.2.1",
+    "pg": "8.13.1",
     "react": "18.2.0",
     "react-dom": "18.2.0",
     "tailwind-merge": "2.6.0",
@@ -30,6 +31,7 @@
   },
   "devDependencies": {
     "@types/node": "20.17.16",
+    "@types/pg": "8.11.11",
     "@types/react": "18.2.48",
     "@types/react-dom": "18.2.18",
     "autoprefixer": "10.4.17",
