@@ -34,13 +34,25 @@ async function saveMessageToDatabase(message: Message & { chatSessionId: string 
   }
 }
 
-async function getMessagesFromDatabase(): Promise<Message[]> {
+async function getMessagesFromDatabase(sessionId: string, page: number = 0, pageSize: number = 20): Promise<{ messages: Message[]; hasMore: boolean }> {
   try {
     return await prisma.$transaction(async (tx: TransactionClient) => {
+      // Get total count for pagination
+      const totalCount = await tx.message.count({
+        where: {
+          chatSessionId: sessionId
+        }
+      });
+
       const messages = await tx.message.findMany({
-        orderBy: {
-          createdAt: 'asc',
+        where: {
+          chatSessionId: sessionId
         },
+        orderBy: {
+          createdAt: 'desc', // Most recent first
+        },
+        skip: page * pageSize,
+        take: pageSize + 1, // Take one extra to check if there are more
         include: {
           chatSession: {
             select: {
@@ -50,19 +62,25 @@ async function getMessagesFromDatabase(): Promise<Message[]> {
         },
       });
 
-      return messages.map(msg => ({
-        id: msg.id,
-        content: msg.content,
-        role: msg.role as "user" | "assistant",
-        reasoning: msg.reasoning,
-        model_type: msg.chatSession.modelType,
-        chatSessionId: msg.chatSessionId,
-        createdAt: msg.createdAt.toISOString(),
-      }));
+      // Check if there are more messages
+      const hasMore = messages.length > pageSize;
+      const paginatedMessages = hasMore ? messages.slice(0, pageSize) : messages;
+
+      return {
+        messages: paginatedMessages.map(msg => ({
+          id: msg.id,
+          content: msg.content,
+          role: msg.role as "user" | "assistant",
+          reasoning: msg.reasoning,
+          chatSessionId: msg.chatSessionId,
+          createdAt: msg.createdAt.toISOString(),
+        })).reverse(), // Reverse to get chronological order
+        hasMore
+      };
     });
   } catch (error) {
     console.error("Database error getting messages:", error);
-    return [];
+    return { messages: [], hasMore: false };
   }
 }
 
@@ -101,8 +119,17 @@ export async function POST(req: Request) {
 
 export async function GET(req: Request) {
   try {
-    const messages = await getMessagesFromDatabase();
-    return NextResponse.json({ messages }, { status: 200 });
+    const { searchParams } = new URL(req.url);
+    const sessionId = searchParams.get('sessionId');
+    const page = parseInt(searchParams.get('page') || '0');
+    const pageSize = parseInt(searchParams.get('pageSize') || '20');
+
+    if (!sessionId) {
+      return NextResponse.json({ error: "Session ID is required" }, { status: 400 });
+    }
+
+    const { messages, hasMore } = await getMessagesFromDatabase(sessionId, page, pageSize);
+    return NextResponse.json({ messages, hasMore }, { status: 200 });
   } catch (error) {
     console.error("API route error:", error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });

@@ -1,6 +1,14 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback, useEffect, useRef } from "react"
+import {
+  getCachedSessions,
+  setCachedSessions,
+  getCachedMessages,
+  setCachedMessages,
+  invalidateSessionCache,
+  invalidateMessageCache
+} from "@/lib/utils/cache"
 
 export type ModelType = "claude" | "deepseek" | "claude_reasoning"
 
@@ -75,49 +83,112 @@ async function fetchWithTimeout(url: string, options: RequestInit) {
 }
 
 export function useChat() {
+  const PAGE_SIZE = 20 // Number of messages to load per page
+
   // State declarations
-  const [sessions, setSessions] = useState<ChatSession[]>([])
+  const [sessions, setSessions] = useState<ChatSession[]>(() => {
+    if (typeof window === 'undefined') return []
+    return getCachedSessions() || []
+  })
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [selectedModel, setSelectedModel] = useState<ModelType>("claude")
   const [error, setError] = useState<string | null>(null)
-  const [isNewChat, setIsNewChat] = useState(true) // Start in new chat state by default
+  const [isNewChat, setIsNewChat] = useState(true)
+  const [hasMoreMessages, setHasMoreMessages] = useState(false)
 
-  // Get current session's messages
-  const messages = activeSessionId 
+  // Refs for pagination
+  const currentPage = useRef(0)
+  
+  // Get current session's messages with pagination
+  const messages = activeSessionId
     ? sessions.find(s => s.id === activeSessionId)?.messages || []
     : []
-const loadSessions = useCallback(async () => {
+  const loadSessionMessages = useCallback(async (sessionId: string, page: number = 0) => {
+    try {
+      const cachedMessages = getCachedMessages(sessionId)
+      if (cachedMessages) {
+        const session = sessions.find(s => s.id === sessionId)
+        if (session) {
+          session.messages = cachedMessages
+          setSessions([...sessions])
+          return
+        }
+      }
 
+      const response = await fetchWithTimeout(`/api/messages?sessionId=${sessionId}&page=${page}&pageSize=${PAGE_SIZE}`, {
+        headers: {
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+        }
+      })
+      const data = await response.json()
+      
+      if (data.messages) {
+        const session = sessions.find(s => s.id === sessionId)
+        if (session) {
+          session.messages = page === 0 ? data.messages : [...session.messages, ...data.messages]
+          setSessions([...sessions])
+          setCachedMessages(sessionId, session.messages)
+          setHasMoreMessages(data.messages.length === PAGE_SIZE)
+        }
+      }
+    } catch (error) {
+      console.error("Error loading session messages:", error)
+      setError(error instanceof Error ? error.message : "Failed to load messages")
+    }
+  }, [sessions])
+
+  const loadSessions = useCallback(async () => {
     setIsLoading(true)
     setError(null)
     let retryAttempt = 0
 
     const attemptLoad = async (): Promise<void> => {
       try {
+        // First check cache
+        const cachedSessions = getCachedSessions()
+        if (cachedSessions) {
+          setSessions(cachedSessions)
+          if (!activeSessionId && !isNewChat && cachedSessions.length > 0) {
+            const mostRecent = cachedSessions.reduce((latest: ChatSession | null, session: ChatSession) => {
+              return !latest || new Date(session.updated_at) > new Date(latest.updated_at)
+                ? session
+                : latest
+            }, null)
+            if (mostRecent) {
+              setActiveSessionId(mostRecent.id)
+              setSelectedModel(mostRecent.model_type)
+            }
+          }
+          return
+        }
+
+        // If no cache, fetch from API
         const response = await fetchWithTimeout("/api/sessions", {
           headers: {
             "Cache-Control": "no-cache, no-store, must-revalidate",
           }
         })
         const data = await response.json()
-        // Filter out sessions with no messages
+        
+        // Filter and process sessions
         const filteredSessions = data.sessions.filter((session: ChatSession) => session.messages.length > 0)
         setSessions(filteredSessions)
+        setCachedSessions(filteredSessions)
         
-        // Set active session to most recent if none selected and not in new chat state
+        // Set active session if needed
         if (!activeSessionId && !isNewChat && filteredSessions.length > 0) {
           const mostRecent = filteredSessions.reduce((latest: ChatSession | null, session: ChatSession) => {
-            if (!latest || new Date(session.updated_at) > new Date(latest.updated_at)) {
-              return session
-            }
-            return latest
+            return !latest || new Date(session.updated_at) > new Date(latest.updated_at)
+              ? session
+              : latest
           }, null)
           if (mostRecent) {
             setActiveSessionId(mostRecent.id)
             setSelectedModel(mostRecent.model_type)
           }
         }
+
       } catch (error) {
         console.error("Error loading sessions:", error)
         if (retryAttempt < MAX_RETRIES) {
@@ -185,6 +256,28 @@ const loadSessions = useCallback(async () => {
         setIsNewChat(false) // Clear new chat state when sending first message
       }
 
+      // Ensure we have a valid session ID
+      if (!currentSessionId) {
+        throw new Error("No active session ID")
+      }
+
+      // Create the user message object
+      const userMessage: Message = {
+        id: crypto.randomUUID(),
+        content,
+        role: "user",
+        chatSessionId: currentSessionId,
+        createdAt: new Date().toISOString()
+      }
+
+      // Optimistically update local state and cache
+      const currentSession = sessions.find(s => s.id === currentSessionId)
+      if (currentSession) {
+        currentSession.messages = [...currentSession.messages, userMessage]
+        setSessions([...sessions])
+        setCachedMessages(currentSessionId, currentSession.messages)
+      }
+
       const response = await fetchWithTimeout("/api/chat", {
         method: "POST",
         headers: {
@@ -204,8 +297,26 @@ const loadSessions = useCallback(async () => {
         throw new Error("No response received from model")
       }
 
-      // Reload sessions to get updated messages
-      await loadSessions()
+      // Create the assistant message object
+      const assistantMessage: Message = {
+        id: crypto.randomUUID(),
+        content: modelResponse.content,
+        role: "assistant",
+        reasoning: modelResponse.reasoning,
+        chatSessionId: currentSessionId,
+        createdAt: new Date().toISOString()
+      }
+
+      // Update local state and cache with the assistant's response
+      if (currentSession) {
+        currentSession.messages = [...currentSession.messages, assistantMessage]
+        setSessions([...sessions])
+        setCachedMessages(currentSessionId, currentSession.messages)
+      }
+
+      // Reset pagination for the active session
+      currentPage.current = 0
+      setHasMoreMessages(false)
 
     } catch (error) {
       console.error("Error sending message:", error)
@@ -260,6 +371,32 @@ const loadSessions = useCallback(async () => {
     loadSessions()
   }, [loadSessions])
 
+  const loadMoreMessages = useCallback(async () => {
+    if (!activeSessionId || !hasMoreMessages || isLoading) return;
+    
+    const nextPage = currentPage.current + 1;
+    setIsLoading(true);
+    
+    try {
+      await loadSessionMessages(activeSessionId, nextPage);
+      currentPage.current = nextPage;
+    } catch (error) {
+      console.error("Error loading more messages:", error);
+      setError(error instanceof Error ? error.message : "Failed to load more messages");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [activeSessionId, hasMoreMessages, isLoading, loadSessionMessages]);
+
+  // Reset pagination when switching sessions
+  useEffect(() => {
+    currentPage.current = 0;
+    setHasMoreMessages(false);
+    if (activeSessionId) {
+      loadSessionMessages(activeSessionId, 0);
+    }
+  }, [activeSessionId, loadSessionMessages]);
+
   return {
     messages,
     sessions,
@@ -274,6 +411,8 @@ const loadSessions = useCallback(async () => {
     deleteSession,
     error,
     setError,
-    isNewChat
+    isNewChat,
+    hasMoreMessages,
+    loadMoreMessages
   }
 }
