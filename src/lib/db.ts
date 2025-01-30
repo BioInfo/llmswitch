@@ -1,18 +1,16 @@
 import { PrismaClient } from '@prisma/client'
 
-const prismaClientSingleton = () => {
-  return new PrismaClient({
-    log: ['error'],
-    datasourceUrl: process.env.POSTGRES_PRISMA_URL,
-  })
-}
-
 declare global {
-  var prisma: undefined | ReturnType<typeof prismaClientSingleton>
+  // eslint-disable-next-line no-var
+  var prisma: PrismaClient | undefined
 }
 
-export const prisma = globalThis.prisma ?? prismaClientSingleton()
+// In development, use a global variable to prevent multiple instances
+// In production (Vercel), create a new client for each request
+export const prisma = global.prisma || new PrismaClient()
 
-if (process.env.NODE_ENV !== 'production') globalThis.prisma = prisma
-
-export default prisma
+if (process.env.NODE_ENV === 'development') {
+  if (!global.prisma) {
+    global.prisma = prisma
+  }
+}
