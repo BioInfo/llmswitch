@@ -1,104 +1,72 @@
-# Current Task: Code Refactoring and Deepseek Integration Fix
+# Current Task: Investigate and Fix Remaining "Maximum Update Depth Exceeded" Error
 
 ## Current Objectives
 
-1. Refactor API Route Structure ✅
-   - Moved model-specific logic to `src/lib/models`
-   - Created `deepseek.ts` and `claude.ts` for handling API calls
-   - Created `src/lib/types/models.ts` for shared types
-   - Created `src/lib/utils/async.ts` for shared async utilities
-   - Updated `src/app/api/chat/route.ts` to use new structure
+1. **Performance Improvements** ✅
+    -   Implemented local storage caching for sessions and messages
+    -   Added pagination to message loading
+    -   Optimized database queries
+    -   Added optimistic updates for better UX
 
-2. Fix Deepseek Integration ✅
-   - Updated to use `deepseek-reasoner` model
-   - Properly handle `reasoning_content` in API response
-   - Enhanced error handling and logging
-   - Added robust response validation and parsing
+2. **Code Refactoring** ✅
+    -   Split the large `useChat` hook into smaller, more focused hooks:
+        -   `useSessions` for managing chat sessions
+        -   `useMessages` for managing messages and pagination
+    -   Created a new `useChat` hook that orchestrates `useSessions` and `useMessages`
+    -   Moved shared types to `src/lib/types/chat.ts`
+    -   Created `src/lib/utils/api.ts` for API-related utilities
+    -   Created `src/lib/utils/cache.ts` for cache management utilities
 
-3. Improve Comparative Analysis ✅
-   - Updated analysis prompt to focus on reasoning transfer
-   - Added specific instructions for analysis content
-   - Implemented better error handling and display
-   - Added more detailed logging
-
-4. Ensure Data Consistency ✅
-   - Fixed type mismatches between database and application
-   - Added type guards and conversion utilities
-   - Updated `MessageList` component to display reasoning
-
-5. Document Changes ✅
-   - Updated `currentTask.md` with completed tasks
-   - Updated `codebaseSummary.md` to reflect the new file structure
-   - Added detailed documentation to the session tracker
-
-6. Commit and Push Changes ✅
-   - Committed all changes to `feature/database` branch
-   - Pushed changes to remote repository
-
-7. Merge into Main and Deploy ✅
-   - Merged `feature/database` branch into `main`
-   - Pushed `main` branch to trigger deployment on Vercel
+3. **Investigate and Fix Remaining "Maximum Update Depth Exceeded" Error**
+    -   Identify the root cause of the error
+    -   Implement a fix that prevents the infinite update loop
+    -   Thoroughly test the application to ensure the error is resolved
 
 ## Relevant Context
 
-These changes improve the codebase's maintainability, enhance the Deepseek integration, and fix issues with the comparative analysis feature. They also address the problem of Deepseek responses not being displayed in the chat interface. The code has been refactored into a more modular structure, and type safety has been improved.
+The "Maximum update depth exceeded" error is a React error that occurs when a component repeatedly calls `setState` inside `componentWillUpdate` or `componentDidUpdate`, leading to an infinite loop. The error message suggests that the issue might be related to how state updates are handled in the application.
+
+The recent refactoring and performance improvements have addressed some potential causes, but the error still persists. Further investigation is needed to pinpoint the exact cause and implement a fix.
 
 ## Technical Details
 
 ### Refactoring
 
-- Created `src/lib/models` to hold model-specific API handlers.
-- Created `src/lib/types` for shared TypeScript types.
-- Created `src/lib/utils` for common utility functions.
-- Updated `src/app/api/chat/route.ts` to use these new modules.
+-   Created `src/hooks/use-sessions.ts` for managing chat sessions
+-   Created `src/hooks/use-messages.ts` for managing messages
+-   Refactored `src/hooks/use-chat.ts` to use the new hooks
+-   Moved shared types to `src/lib/types/chat.ts`
+-   Created `src/lib/utils/api.ts` for API utilities
+-   Created `src/lib/utils/cache.ts` for cache management
 
-### Deepseek Integration
+### Performance Improvements
 
-- Updated `callDeepseek` to use the `deepseek-reasoner` model.
-- Added proper handling of the `reasoning_content` field in the API response.
-- Implemented robust error handling, including retries with exponential backoff.
-- Added detailed logging for requests and responses.
-
-### Comparative Analysis
-
-- Modified `getComparativeAnalysis` to use a more detailed and structured prompt.
-- Added specific instructions for what to include in each section of the analysis.
-- Implemented better error handling and user feedback.
-
-### Data Consistency
-
-- Created `DbMessage` and `DbChatSession` types to mirror the database schema.
-- Added `convertDbMessageToMessage` and `convertDbSessionToSession` to convert between database and application types.
-- Updated `MessageList` to handle and display the `reasoning` field.
+-   Implemented local storage caching for sessions and messages
+-   Added pagination to message loading
+-   Optimized database queries
+-   Added optimistic updates for better UX
 
 ## Next Steps
 
-1. Testing
-   - [ ] Verify successful deployment on Vercel.
-   - [ ] Thoroughly test the application to ensure all features are working as expected.
-   - [ ] Conduct further testing on the Deepseek integration and comparative analysis.
-
-2. Monitoring
-   - [ ] Monitor application logs for any errors or performance issues.
-   - [ ] Track user feedback on the new features.
-
-3. Future Enhancements
-   - [ ] Consider implementing streaming responses for a better user experience.
-   - [ ] Add caching for frequently used prompts and analyses.
-   - [ ] Implement a more sophisticated analysis algorithm for comparing model responses.
+1. **Investigate the Error**
+    -   [ ] Use React DevTools profiler to identify components causing unnecessary re-renders
+    -   [ ] Review state updates in `useSessions`, `useMessages`, and `ChatInterface`
+    -   [ ] Check for potential issues with third-party components (e.g., `TooltipProvider`)
+2. **Implement a Fix**
+    -   [ ] Address the root cause of the infinite update loop
+    -   [ ] Ensure that state updates are handled correctly and efficiently
+3. **Thoroughly Test**
+    -   [ ] Test the application to ensure the error is resolved
+    -   [ ] Verify that all features are working as expected
+    -   [ ] Conduct performance testing to ensure the improvements are effective
 
 ## Dependencies
 
-- Deepseek API
-- Claude API
-- Next.js
-- Prisma ORM
+-   React
+-   Next.js
+-   Radix UI
+-   React DevTools (for debugging)
 
 ## Notes
 
-The refactoring and improvements made in this task significantly enhance the application's functionality, maintainability, and user experience. The deployment to Vercel is in progress.
-
-Related Documents:
-- `sessionTracker-2025-01-29.md`
-- `codebaseSummary.md`
-- `projectRoadmap.md`
+The refactoring and performance improvements have significantly enhanced the application's codebase and user experience. However, the remaining "Maximum update depth exceeded" error needs to be addressed to ensure the application's stability and reliability.

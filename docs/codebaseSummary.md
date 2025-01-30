@@ -14,42 +14,54 @@ The project is a web application built using Next.js, React, and TypeScript. It 
 -   **`src/components/chat/chat-input.tsx`:** The input field for sending messages.
 -   **`src/components/chat/message-list.tsx`:** Displays the list of messages for the active chat session, including reasoning when available.
 -   **`src/components/chat/model-selector.tsx`:** A dropdown menu for selecting the AI model to use.
--   **`src/hooks/use-chat.ts`:** A custom React hook that manages the chat state, including sessions, messages, loading state, selected model, and error handling. It also provides functions for interacting with the API routes.
+-   **`src/hooks/use-chat.ts`:** The main hook for managing chat state and interactions. It orchestrates the `useSessions` and `useMessages` hooks.
+-   **`src/hooks/use-sessions.ts`:** A custom React hook that manages chat sessions, including loading, creating, deleting, switching, and starting new sessions. It interacts with the `/api/sessions` route and utilizes caching for performance.
+-   **`src/hooks/use-messages.ts`:** A custom React hook that manages messages for the active chat session, including loading, sending, and pagination. It interacts with the `/api/messages` and `/api/chat` routes and utilizes caching for performance.
 -   **`src/components/ui/*`:** Reusable UI components (e.g., `button.tsx`, `card.tsx`, `command.tsx`, `dialog.tsx`, `loading-spinner.tsx`, `popover.tsx`, `select.tsx`, `tooltip.tsx`).
 
 **Backend:**
 
 -   **`src/app/api/chat/route.ts`:** API route for sending messages to the selected AI model and saving them to the database. It now uses modular handlers from `src/lib/models`.
 -   **`src/app/api/sessions/route.ts`:** API route for managing chat sessions (GET, POST, DELETE, PATCH).
--   **`src/app/api/messages/route.ts`:** API route for fetching messages (not actively used after implementing chat sessions).
+-   **`src/app/api/messages/route.ts`:** API route for fetching messages with pagination support.
 -   **`src/lib/db.ts`:** Initializes and exports the Prisma client for database interactions.
 -   **`prisma/schema.prisma`:** Defines the database schema using Prisma.
 -   **`src/lib/models/claude.ts`:** Handles API interactions with the Claude model.
 -   **`src/lib/models/deepseek.ts`:** Handles API interactions with the Deepseek model, including reasoning extraction.
+-   **`src/lib/types/chat.ts`:** Defines shared TypeScript types for chat-related entities (e.g., `Message`, `ChatSession`, `ModelType`).
 -   **`src/lib/types/models.ts`:** Defines shared TypeScript types for models, messages, and sessions.
+-   **`src/lib/utils/api.ts`:** Provides utility functions for API interactions, including `fetchWithTimeout` and `getErrorMessage`.
 -   **`src/lib/utils/async.ts`:** Provides utility functions for handling asynchronous operations, such as timeouts.
+-   **`src/lib/utils/cache.ts`:** Provides utility functions for caching sessions and messages in local storage.
 
 ## Data Flow
 
 1. **User Interface:** The user interacts with the `ChatInterface` component, which uses the `useChat` hook to manage the chat state.
-2. **Sending Messages:** When the user sends a message, the `sendMessage` function in `useChat` is called.
-    -   If there's no active session or the model has changed, `createNewSession` is called to create a new session.
-    -   `sendMessage` then makes a `POST` request to `/api/chat` with the session ID, prompt, and selected model(s).
-3. **API Route (`/api/chat`):**
+2. **Loading Sessions:** The `useSessions` hook loads existing sessions from the cache or the `/api/sessions` route on mount or when needed.
+3. **Switching Sessions:** When the user switches sessions, the `useSessions` hook updates the active session ID, and the `useMessages` hook loads messages for the selected session.
+4. **Loading Messages:** The `useMessages` hook loads messages for the active session from the cache or the `/api/messages` route, with pagination support.
+5. **Sending Messages:**
+    -   When the user sends a message, the `sendMessage` function in `useMessages` is called.
+    -   If there's no active session, `createNewSession` from `useSessions` is called to create a new session.
+    -   `sendMessage` optimistically updates the local state and cache with the user's message.
+    -   It then makes a `POST` request to `/api/chat` with the session ID, prompt, and selected model(s).
+6. **API Route (`/api/chat`):**
     -   The `POST` function in `route.ts` receives the request and extracts the session ID, prompt, and models.
     -   It retrieves the chat session from the database using Prisma.
     -   It calls the appropriate function from `src/lib/models` to interact with the selected AI model's API (either `callClaude`, `callDeepseek`, or `claudeWithReasoning`).
     -   It saves the user's message and the AI's response (including reasoning, if available) to the database using Prisma.
     -   It updates the session's `updated_at` timestamp.
     -   It returns the AI's response to the client.
-4. **API Route (`/api/sessions`):**
+7. **API Route (`/api/sessions`):**
     -   The `GET` function retrieves all chat sessions from the database using Prisma.
     -   The `POST` function creates a new chat session.
     -   The `DELETE` function deletes a chat session.
     -   The `PATCH` function updates a chat session (currently used for renaming).
-5. **Updating State:** The `useChat` hook updates the `sessions` and `messages` state based on the API responses, triggering a re-render of the `ChatInterface` component.
-6. **Displaying Messages:** The `MessageList` component receives the `messages` array from `useChat` and renders them in the chat interface, including the reasoning content when available.
-7. **Comparative Analysis:** The `ComparePage` component fetches responses from multiple models and uses Deepseek to generate a comparative analysis, which is then displayed.
+8. **API Route (`/api/messages`):**
+    -   The `GET` function retrieves messages for a specific session with pagination support.
+9. **Updating State:** The `useSessions` and `useMessages` hooks update the `sessions` and `messages` state based on the API responses or local actions, triggering a re-render of the `ChatInterface` component.
+10. **Displaying Messages:** The `MessageList` component receives the `messages` array from `useMessages` and renders them in the chat interface, including the reasoning content when available.
+11. **Comparative Analysis:** The `ComparePage` component fetches responses from multiple models and uses Deepseek to generate a comparative analysis, which is then displayed.
 
 ## External Dependencies
 
@@ -65,7 +77,24 @@ The project is a web application built using Next.js, React, and TypeScript. It 
 -   **Tailwind CSS:** Utility-first CSS framework for styling.
 -   **Framer Motion:** Animation library.
 
-## Recent Significant Changes (2025-01-29)
+## Recent Significant Changes
+
+### 2025-01-30
+
+-   **Refactored Chat State Management:**
+    -   Split the large `useChat` hook into smaller, more focused hooks:
+        -   `useSessions` for managing chat sessions.
+        -   `useMessages` for managing messages and pagination.
+    -   Created a new `useChat` hook that orchestrates `useSessions` and `useMessages`.
+-   **Improved Performance:**
+    -   Implemented local storage caching for sessions and messages using `src/lib/utils/cache.ts`.
+    -   Added pagination support to the `/api/messages` route and `useMessages` hook.
+    -   Optimized state updates to reduce unnecessary re-renders.
+-   **Enhanced Code Organization:**
+    -   Moved shared types to `src/lib/types/chat.ts`.
+    -   Created `src/lib/utils/api.ts` for API-related utilities.
+
+### 2025-01-29
 
 -   **Refactored API Route:**
     -   Moved model-specific API handling to `src/lib/models/claude.ts` and `src/lib/models/deepseek.ts`.
@@ -132,3 +161,4 @@ User feedback has been actively incorporated throughout the development process.
 -   [Session Tracker (2025-01-27)](docs/sessionTracker-2025-01-27.md)
 -   [Session Tracker (2025-01-28)](docs/sessionTracker-2025-01-28.md)
 -   [Session Tracker (2025-01-29)](docs/sessionTracker-2025-01-29.md)
+-   [Session Tracker (2025-01-30)](docs/sessionTracker-2025-01-30.md)
