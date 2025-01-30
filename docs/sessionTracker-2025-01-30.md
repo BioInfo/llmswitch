@@ -80,9 +80,42 @@ Functionality that needs thorough testing:
 
 ## Files Modified
 
-1. `src/lib/utils/cache.ts` (new)
-2. `src/hooks/use-chat.ts`
-3. `src/app/api/messages/route.ts`
+1. `src/lib/utils/cache.ts` (new) - Cache management utilities
+2. `src/lib/utils/api.ts` (new) - API utilities and error handling
+3. `src/lib/types/chat.ts` (new) - Shared type definitions
+4. `src/hooks/use-sessions.ts` (new) - Session management hook
+5. `src/hooks/use-messages.ts` (new) - Message management hook
+6. `src/hooks/use-chat.ts` - Refactored to use new modular hooks
+7. `src/app/api/messages/route.ts` - Added pagination support
+
+## Code Organization
+
+The large useChat hook has been split into several focused modules:
+
+1. **Types Module** (`/lib/types/chat.ts`)
+   - Centralized type definitions
+   - Shared interfaces for messages and sessions
+   - API response types
+
+2. **API Utilities** (`/lib/utils/api.ts`)
+   - Timeout handling
+   - Error processing
+   - Common HTTP headers
+
+3. **Session Management** (`/hooks/use-sessions.ts`)
+   - Session CRUD operations
+   - Session state management
+   - Cache integration for sessions
+
+4. **Message Management** (`/hooks/use-messages.ts`)
+   - Message operations
+   - Pagination handling
+   - Cache integration for messages
+
+5. **Main Chat Hook** (`/hooks/use-chat.ts`)
+   - Orchestrates session and message hooks
+   - Provides unified interface
+   - Manages effects and coordination
 
 ## Branch
 
