@@ -1,22 +1,93 @@
 # Database Schema
 
-## chat_messages Table
+The project uses PostgreSQL as its database and Prisma as the ORM to interact with it. The database schema is defined in `prisma/schema.prisma`.
 
-This table stores chat messages for the application.
+## Tables
 
-| Column Name | Data Type | Description |
-|---|---|---|
-| id | TEXT | Unique identifier for the message (UUID or timestamp). Primary Key. |
-| content | TEXT | Content of the message. |
-| role | TEXT | Role of the message sender ('user' or 'assistant'). |
-| reasoning | TEXT | Reasoning provided by the assistant (if applicable). Nullable. |
-| model_type | TEXT | The LLM model used to generate the response. |
-| created_at | TIMESTAMP WITH TIME ZONE | Timestamp when the message was created. Automatically set on insertion. |
+### ChatSession
 
-**Notes:**
+Stores information about each chat session.
 
-- The `id` column is used as the primary key to uniquely identify each message. It can be a UUID or a timestamp string.
-- The `role` column indicates whether the message is from the user or the assistant.
-- The `reasoning` column is optional and stores the reasoning provided by the assistant model.
-- The `model_type` column specifies which LLM model generated the assistant's response.
-- The `created_at` column automatically records the timestamp when each message is added to the database.
+| Column       | Type      | Modifiers                                 |
+| ------------ | --------- | ----------------------------------------- |
+| id           | String    | @id @default(uuid())                      |
+| title        | String    | @default("New Chat")                      |
+| modelType    | String    | @map("model_type")                        |
+| createdAt    | DateTime  | @default(now()) @map("created_at")        |
+| updatedAt    | DateTime  | @updatedAt @map("updated_at")             |
+| messages     | Message[] |                                           |
+
+**Indexes:**
+
+-   `@@index([updatedAt(sort: Desc)])` on `updatedAt` for sorting sessions by last updated.
+
+### Message
+
+Stores individual messages within a chat session.
+
+| Column          | Type        | Modifiers                                                     |
+| --------------- | ----------- | ------------------------------------------------------------- |
+| id              | String      | @id @default(uuid())                                          |
+| content         | String      |                                                               |
+| role            | String      |                                                               |
+| reasoning       | String?     |                                                               |
+| createdAt       | DateTime    | @default(now()) @map("created_at")                            |
+| chatSession     | ChatSession | @relation(fields: [chatSessionId], references: [id], onDelete: Cascade) |
+| chatSessionId   | String      | @map("chat_session_id")                                       |
+
+**Indexes:**
+
+-   `@@index([chatSessionId])` on `chatSessionId` for filtering messages by session.
+-   `@@index([createdAt(sort: Desc)])` on `createdAt` for sorting messages within a session.
+
+## Relationships
+
+-   A `ChatSession` can have many `Message`s.
+-   A `Message` belongs to one `ChatSession`.
+-   The `onDelete: Cascade` option ensures that when a `ChatSession` is deleted, all associated `Message`s are also deleted.
+
+## Notes
+
+-   The `modelType` column in `ChatSession` stores the AI model used for the session (e.g., "claude", "deepseek", "claude_reasoning").
+-   The `reasoning` column in `Message` is optional and stores the reasoning provided by the AI model (if available).
+-   The `@map` attribute is used to map Prisma field names to different database column names.
+-   The `@default(now())` attribute sets the default value of a column to the current timestamp.
+-   The `@updatedAt` attribute automatically updates the column with the current timestamp whenever a record is updated.
+
+## Example Schema (prisma/schema.prisma)
+
+```prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("POSTGRES_PRISMA_URL")
+}
+
+model ChatSession {
+  id         String    @id @default(uuid())
+  title      String    @default("New Chat")
+  modelType  String    @map("model_type")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+  messages   Message[]
+
+  @@index([updatedAt(sort: Desc)])
+  @@map("chat_sessions")
+}
+
+model Message {
+  id            String      @id @default(uuid())
+  content       String
+  role          String
+  reasoning     String?
+  createdAt     DateTime    @default(now()) @map("created_at")
+  chatSession   ChatSession @relation(fields: [chatSessionId], references: [id], onDelete: Cascade)
+  chatSessionId String      @map("chat_session_id")
+
+  @@index([chatSessionId])
+  @@index([createdAt(sort: Desc)])
+  @@map("messages")
+}

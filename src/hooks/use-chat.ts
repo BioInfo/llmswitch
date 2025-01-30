@@ -9,6 +9,17 @@ export interface Message {
   content: string
   role: "user" | "assistant"
   reasoning?: string | null
+  chatSessionId: string
+  createdAt: string
+}
+
+export interface ChatSession {
+  id: string
+  title: string
+  model_type: ModelType
+  messages: Message[]
+  created_at: string
+  updated_at: string
 }
 
 interface ApiError {
@@ -25,23 +36,38 @@ interface ApiResponse {
   [key: string]: ModelResponse
 }
 
-// Utility function to handle fetch with timeout
-const fetchWithTimeout = async (url: string, options: RequestInit, timeout = 295000) => {
+const API_TIMEOUT = 30000 // 30 seconds timeout for API calls
+const MAX_RETRIES = 3
+
+async function fetchWithTimeout(url: string, options: RequestInit) {
   const controller = new AbortController()
-  const id = setTimeout(() => controller.abort(), timeout)
+  const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT)
 
   try {
     const response = await fetch(url, {
       ...options,
       signal: controller.signal
     })
-    clearTimeout(id)
+
+    clearTimeout(timeoutId)
+
+    if (!response.ok) {
+      let errorMessage = "Failed to fetch"
+      try {
+        const errorData = await response.json()
+        errorMessage = errorData.error || errorData.details || response.statusText
+      } catch {
+        errorMessage = response.statusText
+      }
+      throw new Error(errorMessage)
+    }
+
     return response
   } catch (error) {
-    clearTimeout(id)
+    clearTimeout(timeoutId)
     if (error instanceof Error) {
-      if (error.name === 'AbortError') {
-        throw new Error('Request timed out - the model is taking too long to respond. Please try again.')
+      if (error.name === "AbortError") {
+        throw new Error("Request timed out")
       }
     }
     throw error
@@ -49,157 +75,205 @@ const fetchWithTimeout = async (url: string, options: RequestInit, timeout = 295
 }
 
 export function useChat() {
-  const [messages, setMessages] = useState<Message[]>([])
+  // State declarations
+  const [sessions, setSessions] = useState<ChatSession[]>([])
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [selectedModel, setSelectedModel] = useState<ModelType>("claude")
   const [error, setError] = useState<string | null>(null)
+  const [isNewChat, setIsNewChat] = useState(true) // Start in new chat state by default
 
-  const updateModel = useCallback((model: ModelType) => {
-    console.log('useChat updateModel:', model)
-    setSelectedModel(model)
-    setMessages([])
-    setError(null)
-    setIsLoading(false)
-  }, [])
-
-  const sendMessage = useCallback(async (content: string) => {
-    if (isLoading) return
-    if (!content.trim()) return
+  // Get current session's messages
+  const messages = activeSessionId 
+    ? sessions.find(s => s.id === activeSessionId)?.messages || []
+    : []
+const loadSessions = useCallback(async () => {
 
     setIsLoading(true)
     setError(null)
+    let retryAttempt = 0
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      content,
-      role: "user"
+    const attemptLoad = async () => {
+      try {
+        const response = await fetchWithTimeout("/api/sessions", {
+          headers: {
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+          }
+        })
+        const data = await response.json()
+        // Filter out sessions with no messages
+        const filteredSessions = data.sessions.filter((session: ChatSession) => session.messages.length > 0)
+        setSessions(filteredSessions)
+        
+        // Set active session to most recent if none selected and not in new chat state
+        if (!activeSessionId && !isNewChat && filteredSessions.length > 0) {
+          const mostRecent = filteredSessions.reduce((latest: ChatSession | null, session: ChatSession) => {
+            if (!latest || new Date(session.updated_at) > new Date(latest.updated_at)) {
+              return session
+            }
+            return latest
+          }, null)
+          if (mostRecent) {
+            setActiveSessionId(mostRecent.id)
+            setSelectedModel(mostRecent.model_type)
+          }
+        }
+      } catch (error) {
+        console.error("Error loading sessions:", error)
+        if (retryAttempt < MAX_RETRIES) {
+          retryAttempt++
+          const delay = Math.pow(2, retryAttempt) * 1000
+          await new Promise(resolve => setTimeout(resolve, delay))
+          return attemptLoad()
+        }
+        setError(error instanceof Error ? error.message : "Failed to load chat history")
+      }
     }
 
-    setMessages((prevMessages: Message[]) => [...prevMessages, userMessage])
+    await attemptLoad()
+    setIsLoading(false)
+  }, [activeSessionId, isNewChat])
+
+  const createNewSession = useCallback(async (model: ModelType, title: string = "New Chat") => {
+    try {
+      setError(null)
+      const response = await fetchWithTimeout("/api/sessions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ 
+          model_type: model,
+          title
+        }),
+      })
+      
+      const newSession = await response.json()
+      setSessions(prev => [...prev, newSession])
+      setActiveSessionId(newSession.id)
+      setSelectedModel(model)
+      setIsNewChat(false) // Clear new chat state when creating a session
+      return newSession
+    } catch (error) {
+      console.error("Error creating new session:", error)
+      setError(error instanceof Error ? error.message : "Failed to create new chat session")
+      return null
+    }
+  }, [])
+
+  const updateModel = useCallback((model: ModelType) => {
+    setSelectedModel(model)
+  }, [])
+
+  const sendMessage = useCallback(async (content: string) => {
+    if (isLoading || !content.trim()) return
+    setIsLoading(true)
+    setError(null)
 
     try {
+      // If no active session, create a new one
+      let currentSessionId = activeSessionId
+      if (!currentSessionId) {
+        // Create new session with first message as title
+        const title = content.slice(0, 50) + (content.length > 50 ? "..." : "")
+        const newSession = await createNewSession(selectedModel, title)
+        if (!newSession) {
+          throw new Error("Failed to create new chat session")
+        }
+        currentSessionId = newSession.id
+        setActiveSessionId(currentSessionId)
+        setIsNewChat(false) // Clear new chat state when sending first message
+      }
+
       const response = await fetchWithTimeout("/api/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Cache-Control": "no-cache, no-store, must-revalidate",
-          "Pragma": "no-cache"
         },
-        credentials: "same-origin",
-        cache: "no-store",
         body: JSON.stringify({
+          sessionId: currentSessionId,
           prompt: content,
           models: [selectedModel],
         }),
       })
 
-      // Handle non-JSON responses
-      const text = await response.text()
-      let data: ApiResponse
-      try {
-        data = JSON.parse(text)
-      } catch (e) {
-        console.error('Failed to parse response:', text)
-        throw new Error(text.includes('FUNCTION_INVOCATION_TIMEOUT') 
-          ? 'The request timed out. The model is taking too long to respond. Please try again with a shorter prompt.'
-          : `Invalid response format: ${text.slice(0, 100)}...`)
-      }
-
-      if (!response.ok) {
-        const errorMessage = (typeof data === 'object' && 'error' in data && typeof data.error === 'string') 
-          ? data.error 
-          : text || "Failed to send message"
-        throw new Error(errorMessage)
-      }
-      
+      const data = await response.json()
       const modelResponse = data[selectedModel]
       if (!modelResponse) {
         throw new Error("No response received from model")
       }
 
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        content: modelResponse.content,
-        reasoning: modelResponse.reasoning || null,
-        role: "assistant"
-      }
-
-      setMessages((prevMessages: Message[]) => [...prevMessages, assistantMessage]);
-
-      // Save messages to database
-      try {
-        await fetch("/api/messages", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ messages: [...messages, userMessage, assistantMessage] }),
-        });
-      } catch (dbError) {
-        console.error("Error saving message to database:", dbError);
-        setError("Failed to save chat history."); // Inform user about database save failure
-      }
+      // Reload sessions to get updated messages
+      await loadSessions()
 
     } catch (error) {
       console.error("Error sending message:", error)
       setError(error instanceof Error ? error.message : "An unexpected error occurred")
-      
-      // Remove the user message if the API call failed
-      setMessages((prevMessages: Message[]) => prevMessages.filter((msg: Message) => msg.id !== userMessage.id))
     } finally {
       setIsLoading(false)
     }
-  }, [selectedModel, isLoading]);
+  }, [activeSessionId, selectedModel, isLoading, loadSessions, createNewSession])
 
-  const clearMessages = useCallback(async () => {
-    setMessages([]);
-    setError(null);
-    setIsLoading(false);
+  const switchSession = useCallback((sessionId: string) => {
+    const session = sessions.find(s => s.id === sessionId)
+    if (session) {
+      setActiveSessionId(sessionId)
+      setSelectedModel(session.model_type)
+      setError(null)
+      setIsNewChat(false) // Clear new chat state when switching sessions
+    }
+  }, [sessions])
 
-    // Clear messages from database
+  const startNewChat = useCallback(() => {
+    setActiveSessionId(null)
+    setSelectedModel("claude")
+    setIsNewChat(true) // Set new chat flag to prevent auto-loading most recent session
+  }, [])
+
+  const deleteSession = useCallback(async (sessionId: string) => {
+    setIsLoading(true)
+    setError(null)
     try {
-      await fetch("/api/messages", {
+      const response = await fetchWithTimeout(`/api/sessions?id=${sessionId}`, {
         method: "DELETE",
       });
-    } catch (dbError) {
-      console.error("Error clearing messages from database:", dbError);
-      setError("Failed to clear chat history."); // Inform user about database clear failure
-    }
-  }, []);
-
-  const loadMessages = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const response = await fetch("/api/messages", {
-        method: "GET",
-      });
       if (!response.ok) {
-        throw new Error(`Failed to load messages: ${response.status} ${response.statusText}`);
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to delete session");
       }
-      const data = await response.json();
-      if (data.messages) {
-        setMessages(data.messages);
+      // Optimistically update sessions state
+      setSessions(prevSessions => prevSessions.filter(session => session.id !== sessionId));
+      if (activeSessionId === sessionId) {
+        startNewChat(); // Start new chat if the active session was deleted
       }
-    } catch (dbError) {
-      console.error("Error loading messages from database:", dbError);
-      setError("Failed to load chat history.");
+    } catch (error) {
+      console.error("Error deleting session:", error)
+      setError(error instanceof Error ? error.message : "Failed to delete chat session");
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [activeSessionId, startNewChat])
 
+  // Load sessions on mount
   useEffect(() => {
-    loadMessages();
-  }, [loadMessages]);
+    loadSessions()
+  }, [loadSessions])
 
   return {
     messages,
+    sessions,
+    setSessions,
+    activeSessionId,
     isLoading,
     selectedModel,
     setSelectedModel: updateModel,
     sendMessage,
-    clearMessages,
-    error
+    switchSession,
+    startNewChat,
+    deleteSession,
+    error,
+    setError,
+    isNewChat
   }
 }

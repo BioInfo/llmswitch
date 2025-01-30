@@ -1,55 +1,82 @@
 "use client"
 
-import React, { useRef, useState } from "react"
-import { Button } from "@/components/ui/button"
-import { SendHorizontal } from "lucide-react"
+import React from 'react'
+import { cn } from "@/lib/utils"
 
 interface ChatInputProps {
-  onSend: (message: string) => void
+  onSend: (content: string) => void
   isLoading?: boolean
+  placeholder?: string
 }
 
-export function ChatInput({ onSend, isLoading }: ChatInputProps) {
-  const [input, setInput] = useState("")
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+export function ChatInput({ 
+  onSend, 
+  isLoading = false,
+  placeholder = "Send a message..."
+}: ChatInputProps) {
+  const [input, setInput] = React.useState("")
+  const textareaRef = React.useRef<HTMLTextAreaElement>(null)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = React.useCallback((e: React.FormEvent) => {
     e.preventDefault()
     if (!input.trim() || isLoading) return
 
     onSend(input)
     setInput("")
-  }
+    
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto"
+    }
+  }, [input, isLoading, onSend])
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = React.useCallback((e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
       handleSubmit(e)
     }
-  }
+  }, [handleSubmit])
+
+  const handleTextareaChange = React.useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const textarea = e.target
+    setInput(textarea.value)
+
+    // Auto-resize textarea
+    textarea.style.height = "auto"
+    textarea.style.height = `${textarea.scrollHeight}px`
+  }, [])
 
   return (
     <form onSubmit={handleSubmit} className="relative">
       <textarea
         ref={textareaRef}
         value={input}
-        onChange={(e) => setInput(e.target.value)}
+        onChange={handleTextareaChange}
         onKeyDown={handleKeyDown}
-        placeholder="Type a message..."
-        className="min-h-[50px] w-full resize-none rounded-lg border bg-background px-4 py-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 pr-12"
-        style={{ maxHeight: "200px" }}
+        placeholder={placeholder}
         rows={1}
         disabled={isLoading}
+        className={cn(
+          "w-full resize-none rounded-lg border border-input bg-background px-4 py-3",
+          "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+          "disabled:cursor-not-allowed disabled:opacity-50",
+          "min-h-[56px] max-h-[200px]",
+          "pr-20" // Space for the send button
+        )}
       />
-      <Button
+      <button
         type="submit"
-        size="icon"
-        disabled={isLoading || !input.trim()}
-        className="absolute right-2 top-1/2 h-8 w-8 -translate-y-1/2 rounded-full bg-primary p-2 text-primary-foreground hover:bg-primary/90"
+        disabled={!input.trim() || isLoading}
+        className={cn(
+          "absolute right-2 top-[13px]",
+          "rounded-md px-3 py-2 text-sm font-semibold",
+          "bg-primary text-primary-foreground shadow hover:bg-primary/90",
+          "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+          "disabled:pointer-events-none disabled:opacity-50",
+          "transition-opacity"
+        )}
       >
-        <SendHorizontal className="h-4 w-4" />
-        <span className="sr-only">Send message</span>
-      </Button>
+        Send
+      </button>
     </form>
   )
 }
