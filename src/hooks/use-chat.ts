@@ -93,7 +93,7 @@ const loadSessions = useCallback(async () => {
     setError(null)
     let retryAttempt = 0
 
-    const attemptLoad = async () => {
+    const attemptLoad = async (): Promise<void> => {
       try {
         const response = await fetchWithTimeout("/api/sessions", {
           headers: {

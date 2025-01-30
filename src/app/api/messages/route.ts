@@ -2,15 +2,15 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { Message } from "@/hooks/use-chat";
 
-async function saveMessageToDatabase(message: Message & { model_type?: string }) {
+async function saveMessageToDatabase(message: Message & { chatSessionId: string }) {
   try {
-    await prisma.chatMessage.create({
+    await prisma.message.create({
       data: {
         id: message.id,
         content: message.content,
         role: message.role,
         reasoning: message.reasoning || null,
-        model_type: message.model_type || null,
+        chatSessionId: message.chatSessionId,
       },
     });
     return { success: true };
@@ -22,9 +22,16 @@ async function saveMessageToDatabase(message: Message & { model_type?: string })
 
 async function getMessagesFromDatabase() {
   try {
-    const messages = await prisma.chatMessage.findMany({
+    const messages = await prisma.message.findMany({
       orderBy: {
-        created_at: 'asc',
+        createdAt: 'asc',
+      },
+      include: {
+        chatSession: {
+          select: {
+            modelType: true,
+          },
+        },
       },
     });
 
@@ -33,7 +40,7 @@ async function getMessagesFromDatabase() {
       content: msg.content,
       role: msg.role as "user" | "assistant",
       reasoning: msg.reasoning,
-      model_type: msg.model_type,
+      model_type: msg.chatSession.modelType,
     }));
   } catch (error) {
     console.error("Database error getting messages:", error);
@@ -43,7 +50,7 @@ async function getMessagesFromDatabase() {
 
 async function clearMessagesFromDatabase() {
   try {
-    await prisma.chatMessage.deleteMany();
+    await prisma.message.deleteMany();
     return { success: true };
   } catch (error) {
     console.error("Database error clearing messages:", error);
