@@ -82,14 +82,16 @@ export default function ComparePage() {
   const [analysis, setAnalysis] = React.useState<string | null>(null)
   const [isLoading, setIsLoading] = React.useState(false)
   const [isAnalyzing, setIsAnalyzing] = React.useState(false)
+  const [analysisError, setAnalysisError] = React.useState<string | null>(null)
 
   const { sendMessage } = useChat()
 
   const getComparativeAnalysis = async (responses: ComparisonState, prompt: string) => {
     try {
       setIsAnalyzing(true)
+      setAnalysisError(null)
       
-      // First, let's format the responses in a clear way
+      console.log('Generating analysis for prompt:', prompt)
       const formattedResponses = `
 ORIGINAL PROMPT:
 "${prompt}"
@@ -114,69 +116,69 @@ ${responses.claude_reasoning.reasoning || 'No explicit reasoning provided'}
 
 ${formattedResponses}
 
-Provide a structured analysis using the following format. Use ### for main sections and bullet points (•) for details:
+Your goal is to evaluate how Deepseek's reasoning process enhanced Claude's response and compare all three approaches. Consider:
 
-### 1. KEY DIFFERENCES IN APPROACH
+1. How Deepseek's native reasoning reflects its problem-solving process
+2. How Claude approached the problem independently
+3. How Claude's response was enhanced by incorporating Deepseek's reasoning
 
-Organization & Structure:
-• How did Deepseek R1 organize its solution? [quote structure]
-• How did Claude structure its response? [quote structure]
-• How did Claude + Reasoning organize its solution? [quote structure]
+Provide a structured analysis using the following format. Use ### for main sections and bullet points (•) for details. IMPORTANT: You must fill out every section completely with specific examples and quotes.
 
-Technical Detail:
-• What specific technical details did Deepseek R1 provide? [quote details]
-• What technical aspects did Claude focus on? [quote details]
-• How did Claude + Reasoning handle technical specifics? [quote details]
+### 1. BASELINE PERFORMANCE
 
-Focus Areas:
-• What unique elements did Deepseek R1 emphasize? [quote examples]
-• What distinct aspects did Claude prioritize? [quote examples]
-• What special focus areas emerged in Claude + Reasoning? [quote examples]
+Deepseek's Initial Response:
+• [Quote response] Analyze the main solution provided
+• [Quote reasoning] Examine their explicit reasoning process
+• [Quote specifics] Note key strategies and considerations
 
-### 2. SHARED ELEMENTS
+Claude's Independent Response:
+• [Quote response] Analyze their unguided approach
+• [Quote specifics] Note their natural problem-solving strategy
+• [Quote unique elements] Identify distinctive aspects
 
-Core Technologies:
-• What key technologies appeared in all responses? [quote each instance]
-• What common technical approaches were used? [quote examples]
+### 2. REASONING PROCESS ANALYSIS
 
-Common Challenges:
-• What specific challenges did all responses identify? [quote each]
-• How did they approach these shared challenges? [quote approaches]
+Deepseek's Reasoning Structure:
+• [Quote reasoning structure] How did Deepseek organize its thoughts?
+• [Quote key assumptions] What premises guided their thinking?
+• [Quote methodology] What problem-solving strategies were employed?
 
-Shared Priorities:
-• What key priorities were consistent across all responses? [quote examples]
-• What common goals or objectives emerged? [quote instances]
+Reasoning Application:
+• [Quote from enhanced response] How was Deepseek's reasoning incorporated?
+• [Quote outcome] How did it shape Claude's enhanced response?
+• [Quote improvements] What specific enhancements emerged?
 
-### 3. STANDOUT STRENGTHS
+### 3. COMPARATIVE EFFECTIVENESS
 
-Deepseek R1 Strengths:
-• [Quote specific technical or analytical strength]
-• [Quote unique insight or approach]
-• [Quote distinctive feature]
+Solution Quality:
+• [Quote Deepseek solution] Evaluate their direct solution
+• [Quote Claude solution] Assess their independent approach
+• [Quote enhanced solution] Analyze the reasoning-enhanced version
 
-Claude Strengths:
-• [Quote specific technical or analytical strength]
-• [Quote unique insight or approach]
-• [Quote distinctive feature]
+Reasoning Impact:
+• [Quote original reasoning] Examine Deepseek's reasoning quality
+• [Quote enhanced elements] Show how it improved Claude's response
+• [Quote specific gains] Identify concrete improvements
 
-Combined Approach Strengths:
-• [Quote specific enhancement from reasoning]
-• [Quote improved insight or approach]
-• [Quote distinctive synergy]
+### 4. SYNTHESIS
 
-### 4. EFFECTIVENESS ANALYSIS
+Key Findings:
+• [Quote examples] What worked best in each approach?
+• [Quote evidence] How did reasoning transfer between models?
+• [Quote outcomes] What insights emerged about model collaboration?
 
-Most Effective Approach:
-• Which response was most effective? [name and explain why]
-• [Quote key evidence supporting this judgment]
-• [Quote additional supporting example]
+Best Practices:
+• [Quote best elements] What patterns proved most effective?
+• [Quote integration insights] How best to combine model strengths?
+• [Quote recommendations] What approach is optimal for similar problems?
 
-Best Use Cases:
-• Deepseek R1: [quote content suggesting ideal applications]
-• Claude: [quote content suggesting ideal applications]
-• Combined: [quote content suggesting ideal applications]
+For each point:
+1. Include direct quotes from both the responses and reasoning
+2. Analyze how Deepseek's reasoning was utilized
+3. Evaluate the effectiveness of reasoning transfer
+4. Consider practical implications
 
-For each point, use direct quotes from the responses to support your analysis. Focus on specific details and concrete examples rather than general observations.`
+Focus on specific examples and concrete evidence. Show how Deepseek's reasoning process influenced and potentially improved Claude's response.`
 
       const response = await fetch("/api/chat", {
         method: "POST",
@@ -187,14 +189,17 @@ For each point, use direct quotes from the responses to support your analysis. F
         },
         credentials: "same-origin",
         cache: "no-store",
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           prompt: analysisPrompt,
-          models: ["deepseek"]
+          models: ["deepseek"],
+          sessionId: "analysis" + Date.now() // Add a unique sessionId for analysis requests
         })
       })
       
       // Handle non-JSON responses
       const text = await response.text()
+      console.log('Analysis response text:', text.slice(0, 500) + '...')
+
       let data
       try {
         data = JSON.parse(text)
@@ -207,11 +212,24 @@ For each point, use direct quotes from the responses to support your analysis. F
         throw new Error(`Error generating analysis: ${data.error || text || 'Unknown error'}`)
       }
 
-      if (data.deepseek) {
-        setAnalysis(data.deepseek.content)
+      if (!data.deepseek?.content) {
+        console.error('Invalid analysis response:', data)
+        throw new Error('No analysis content received from Deepseek')
       }
+
+      // Log and validate analysis content
+      console.log('Analysis content preview:', data.deepseek.content.slice(0, 500) + '...')
+      
+      if (!data.deepseek.content.includes('### 1. BASELINE PERFORMANCE')) {
+        console.error('Analysis missing required sections:', data.deepseek.content)
+        throw new Error('Analysis response missing required sections')
+      }
+
+      setAnalysis(data.deepseek.content)
     } catch (error) {
       console.error("Error generating analysis:", error)
+      setAnalysisError(error instanceof Error ? error.message : "Failed to generate analysis")
+      setAnalysis(null) // Clear any previous analysis on error
     } finally {
       setIsAnalyzing(false)
     }
@@ -240,9 +258,10 @@ For each point, use direct quotes from the responses to support your analysis. F
         // Add credentials and cache settings
         credentials: "same-origin",
         cache: "no-store",
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           prompt: prompt.prompt,
-          models: ["deepseek", "claude", "claude_reasoning"]
+          models: ["deepseek", "claude", "claude_reasoning"],
+          sessionId: "comparison" + Date.now() // Add a unique sessionId for comparison requests
         })
       })
 
@@ -390,10 +409,19 @@ For each point, use direct quotes from the responses to support your analysis. F
               </Card>
             )}
 
+            {analysisError && (
+              <div className="p-4 mb-4 bg-destructive/10 text-destructive rounded-lg">
+                <p className="text-sm font-medium">Error generating analysis:</p>
+                <p className="text-sm mt-1">{analysisError}</p>
+              </div>
+            )}
+
             {isAnalyzing && (
               <div className="flex justify-center items-center gap-3 py-6">
                 <LoadingSpinner size="sm" />
-                <p className="text-sm text-muted-foreground">Analyzing responses...</p>
+                <p className="text-sm text-muted-foreground">
+                  Analyzing responses and comparing approaches...
+                </p>
               </div>
             )}
 

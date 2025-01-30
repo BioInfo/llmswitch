@@ -1,274 +1,208 @@
 import { NextResponse } from "next/server"
-
-const CLAUDE_API_KEY = process.env.CLAUDE_API_KEY
-const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY
-
-const TIMEOUT = 290000 // 290 seconds, just under Vercel's 300s limit
-
-interface ModelResponse {
-  content: string
-  reasoning: string | null
-}
-
-async function callClaude(message: string): Promise<ModelResponse> {
-  try {
-    if (!CLAUDE_API_KEY) {
-      throw new Error("Claude API key not configured")
-    }
-
-    console.log("Using Claude API key:", CLAUDE_API_KEY?.slice(0, 10) + "...")
-
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT)
-
-    try {
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": CLAUDE_API_KEY,
-          "anthropic-version": "2023-06-01"
-        },
-        body: JSON.stringify({
-          model: "claude-3-sonnet-20240229",
-          max_tokens: 4096,
-          messages: [{ role: "user", content: message }]
-        }),
-        signal: controller.signal
-      })
-
-      clearTimeout(timeoutId)
-
-      if (!response.ok) {
-        const errorBody = await response.text()
-        throw new Error(`Claude API error: ${response.status} ${response.statusText} - ${errorBody}`)
-      }
-
-      const data = await response.json()
-      
-      if (!data.content?.[0]?.text) {
-        console.error("Unexpected Claude API response:", data)
-        throw new Error("Invalid response format from Claude API")
-      }
-
-      return {
-        content: data.content[0].text,
-        reasoning: null
-      }
-    } catch (error) {
-      clearTimeout(timeoutId)
-      if (error instanceof Error) {
-        if (error.name === "AbortError") {
-          throw new Error("Claude API request timed out after 290 seconds")
-        }
-      }
-      throw error
-    }
-  } catch (error) {
-    console.error("Claude API error:", error)
-    throw error
-  }
-}
-
-async function callDeepseek(message: string): Promise<ModelResponse> {
-  try {
-    if (!DEEPSEEK_API_KEY) {
-      throw new Error("Deepseek API key not configured")
-    }
-
-    console.log("Using Deepseek API key:", DEEPSEEK_API_KEY?.slice(0, 10) + "...")
-
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT)
-
-    try {
-      const response = await fetch("https://api.deepseek.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${DEEPSEEK_API_KEY}`,
-          "Accept": "application/json"
-        },
-        body: JSON.stringify({
-          model: "deepseek-reasoner",
-          messages: [{ role: "user", content: message }],
-          max_tokens: 4096
-        }),
-        signal: controller.signal,
-        cache: 'no-cache'
-      })
-
-      clearTimeout(timeoutId)
-
-      if (!response.ok) {
-        const errorBody = await response.text()
-        throw new Error(`Deepseek API error: ${response.status} ${response.statusText} - ${errorBody}`)
-      }
-
-      const data = await response.json()
-      
-      if (!data.choices?.[0]?.message?.content) {
-        console.error("Unexpected Deepseek API response:", data)
-        throw new Error("Invalid response format from Deepseek API")
-      }
-
-      // Clean up response formatting
-      let cleanedContent = data.choices[0].message.content
-        .replace(/\\\(|\\\)/g, '')
-        .replace(/\\boxed{([^}]+)}/g, '$1')
-        .replace(/\*\*Answer:\*\*|\*\*/g, '')
-        .replace(/\\times/g, 'x')
-        .replace(/\\frac{([^}]+)}{([^}]+)}/g, '$1/$2')
-        .trim()
-
-      return {
-        content: cleanedContent,
-        reasoning: data.choices[0].message.reasoning_content || null
-      }
-    } catch (error) {
-      clearTimeout(timeoutId)
-      if (error instanceof Error) {
-        if (error.name === "AbortError") {
-          throw new Error("Deepseek API request timed out after 290 seconds")
-        }
-      }
-      throw error
-    }
-  } catch (error) {
-    console.error("Deepseek API error:", error)
-    throw error
-  }
-}
-
-async function claudeWithReasoning(message: string): Promise<ModelResponse> {
-  try {
-    if (!CLAUDE_API_KEY) {
-      throw new Error("Claude API key not configured")
-    }
-
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT)
-
-    try {
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": CLAUDE_API_KEY,
-          "anthropic-version": "2023-06-01"
-        },
-        body: JSON.stringify({
-          model: "claude-3-sonnet-20240229",
-          max_tokens: 4096,
-          messages: [
-            { 
-              role: "user", 
-              content: `${message}\n\nPlease provide your response in two parts:\n1. Your direct answer\n2. Your reasoning process, including key considerations and assumptions`
-            }
-          ]
-        }),
-        signal: controller.signal
-      })
-
-      clearTimeout(timeoutId)
-
-      if (!response.ok) {
-        const errorBody = await response.text()
-        throw new Error(`Claude API error: ${response.status} ${response.statusText} - ${errorBody}`)
-      }
-
-      const data = await response.json()
-      const fullResponse = data.content[0].text
-      
-      // Split response into content and reasoning
-      const parts = fullResponse.split(/\n\s*2\.\s*(?:Your )?[Rr]easoning/)
-      const content = parts[0].replace(/1\.\s*(?:Your )?(?:[Dd]irect )?[Aa]nswer:?\s*/i, '').trim()
-      const reasoning = parts[1]?.trim() || null
-
-      return {
-        content,
-        reasoning
-      }
-    } catch (error) {
-      clearTimeout(timeoutId)
-      if (error instanceof Error) {
-        if (error.name === "AbortError") {
-          throw new Error("Claude API request timed out after 290 seconds")
-        }
-      }
-      throw error
-    }
-  } catch (error) {
-    console.error("Claude with reasoning error:", error)
-    throw error
-  }
-}
+import { prisma } from "@/lib/db"
+import { 
+  SessionWithMessages, 
+  ModelResponse, 
+  ModelType, 
+  MessageRole,
+  DbChatSession,
+  convertDbSessionToSession,
+  isValidModelType 
+} from "@/lib/types/models"
+import { callDeepseek } from "@/lib/models/deepseek"
+import { callClaude, claudeWithReasoning } from "@/lib/models/claude"
+import { withTimeout, DB_TIMEOUT } from "@/lib/utils/async"
 
 export const maxDuration = 300 // Set max duration to 300 seconds
 
+async function saveMessages(sessionId: string, prompt: string, response: ModelResponse, model: ModelType) {
+  // Save user message
+  await withTimeout(
+    prisma.message.create({
+      data: {
+        content: prompt,
+        role: "user" as MessageRole,
+        chatSessionId: sessionId
+      }
+    }),
+    DB_TIMEOUT
+  )
+
+  // Save assistant message
+  await withTimeout(
+    prisma.message.create({
+      data: {
+        content: response.content,
+        role: "assistant" as MessageRole,
+        reasoning: response.reasoning,
+        chatSessionId: sessionId
+      }
+    }),
+    DB_TIMEOUT
+  )
+
+  // Update session timestamp
+  await withTimeout(
+    prisma.chatSession.update({
+      where: { id: sessionId },
+      data: { updatedAt: new Date() }
+    }),
+    DB_TIMEOUT
+  )
+}
+
 export async function POST(req: Request) {
   try {
-    const { prompt, models } = await req.json()
+    const { sessionId, prompt, models } = await req.json()
 
-    if (!prompt || !models || !Array.isArray(models)) {
+    if (!sessionId || !prompt || !models || !Array.isArray(models)) {
       return NextResponse.json(
-        { error: "Invalid request format - missing prompt or models array" },
+        { error: "Invalid request format - missing required fields" },
         { status: 400 }
       )
+    }
+
+    // Validate models are all valid ModelTypes
+    if (!models.every(isValidModelType)) {
+      return NextResponse.json(
+        { error: "Invalid model type specified" },
+        { status: 400 }
+      )
+    }
+
+    // Log the models array here
+    console.log("[Chat API] models array:", models)
+
+    let session: SessionWithMessages | null = null
+
+    // Special handling for comparison and analysis requests
+    if (sessionId.startsWith('comparison') || sessionId.startsWith('analysis')) {
+      // Create a temporary session
+      const dbSession = await withTimeout(
+        prisma.chatSession.create({
+          data: {
+            id: sessionId,
+            title: `Temporary ${sessionId.startsWith('comparison') ? 'Comparison' : 'Analysis'} Session`,
+            modelType: models[0], // Use first model as the session type
+          },
+          include: { messages: true }
+        }),
+        DB_TIMEOUT
+      ) as DbChatSession
+
+      session = convertDbSessionToSession(dbSession)
+    } else {
+      // For regular chat sessions, get existing session
+      const dbSession = await withTimeout(
+        prisma.chatSession.findUnique({
+          where: { id: sessionId },
+          include: { messages: true }
+        }),
+        DB_TIMEOUT
+      ) as DbChatSession | null
+
+      if (!dbSession) {
+        return NextResponse.json(
+          { error: "Chat session not found" },
+          { status: 404 }
+        )
+      }
+
+      session = convertDbSessionToSession(dbSession)
     }
 
     console.log(`Processing request for models: ${models.join(", ")}`)
     const newResponses: Record<string, ModelResponse> = {}
 
-    try {
-      await Promise.all(
-        models.map(async (model) => {
-          console.log(`Fetching response for ${model}...`)
-          let response: ModelResponse
-          
-          try {
-            switch (model) {
-              case "claude":
-                response = await callClaude(prompt)
-                break
-              case "deepseek":
-                response = await callDeepseek(prompt)
-                break
-              case "claude_reasoning":
-                response = await claudeWithReasoning(prompt)
-                break
-              default:
-                throw new Error(`Unknown model: ${model}`)
-            }
-            
-            console.log(`Got response for ${model}:`, response)
-            newResponses[model] = response
-          } catch (error) {
-            console.error(`Error fetching response from ${model}:`, error)
-            throw error
+    // Get Deepseek's response first if needed for Claude+Reasoning
+    let deepseekReasoning: string | undefined
+    if (models.includes("deepseek") || models.includes("claude_reasoning")) {
+      try {
+        console.log("Getting Deepseek response for reasoning...")
+        const deepseekResponse = await callDeepseek(prompt)
+        if (models.includes("deepseek")) {
+          newResponses["deepseek"] = deepseekResponse
+          // Save Deepseek messages to database
+          await saveMessages(sessionId, prompt, deepseekResponse, "deepseek")
+        }
+        deepseekReasoning = deepseekResponse.reasoning || undefined
+        console.log("Got Deepseek reasoning:", deepseekReasoning)
+      } catch (error) {
+        console.error("Error getting Deepseek response:", error)
+        if (models.includes("deepseek")) {
+          const errorResponse = {
+            content: `Error: ${error instanceof Error ? error.message : String(error)}`,
+            reasoning: null
           }
-        })
-      )
-
-      return NextResponse.json(newResponses, {
-        status: 200,
-        headers: {
-          "Content-Type": "application/json",
-          "Cache-Control": "no-store, no-cache, must-revalidate",
-        },
-      })
-    } catch (error) {
-      console.error("Error processing models:", error)
-      return NextResponse.json(
-        { error: `Error processing models: ${error instanceof Error ? error.message : String(error)}` },
-        { status: 500 }
-      )
+          newResponses["deepseek"] = errorResponse
+          // Save error response to database
+          await saveMessages(sessionId, prompt, errorResponse, "deepseek")
+        }
+      }
     }
+
+    // Process remaining models
+    for (const model of models) {
+      if (model === "deepseek") continue // Already handled
+      
+      console.log(`[Chat API] Processing model: ${model}`)
+      try {
+        let response: ModelResponse
+        switch (model) {
+          case "claude":
+            response = await callClaude(prompt)
+            break
+          case "claude_reasoning":
+            response = await claudeWithReasoning(prompt, deepseekReasoning)
+            break
+          default:
+            throw new Error(`Unknown model: ${model}`)
+        }
+        console.log(`Got response for ${model}:`, response)
+        newResponses[model] = response
+
+        // Save messages to database
+        await saveMessages(sessionId, prompt, response, model)
+
+      } catch (error) {
+        console.error(`Error fetching response from ${model}:`, error)
+        const errorResponse = {
+          content: `Error: ${error instanceof Error ? error.message : String(error)}`,
+          reasoning: null
+        }
+        newResponses[model] = errorResponse
+        // Save error response to database
+        await saveMessages(sessionId, prompt, errorResponse, model)
+      }
+    }
+
+    // Clean up temporary sessions after we're done
+    if (sessionId.startsWith('comparison') || sessionId.startsWith('analysis')) {
+      try {
+        await withTimeout(
+          prisma.chatSession.delete({
+            where: { id: sessionId }
+          }),
+          DB_TIMEOUT
+        )
+      } catch (error) {
+        console.error('Error cleaning up temporary session:', error)
+        // Don't throw - this is cleanup code
+      }
+    }
+
+    return NextResponse.json(newResponses, {
+      status: 200,
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store, no-cache, must-revalidate",
+      },
+    })
   } catch (error) {
-    console.error("API route error:", error)
+    console.error("Error processing models:", error)
     return NextResponse.json(
-      { error: "Invalid request format or server error" },
-      { status: 400 }
+      { error: `Error processing models: ${error instanceof Error ? error.message : String(error)}` },
+      { status: 500 }
     )
-  }
+  } 
 }
