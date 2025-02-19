@@ -43,12 +43,13 @@ export function useMessages({
       const data = await response.json()
       
       if (data.messages) {
-        const updatedMessages = page === 0 
-          ? data.messages 
-          : [...messages, ...data.messages]
-        
-        setMessages(updatedMessages)
-        setCachedMessages(sessionId, updatedMessages)
+        setMessages(prevMessages => {
+          const updatedMessages = page === 0
+            ? data.messages
+            : [...prevMessages, ...data.messages];
+          setCachedMessages(sessionId, updatedMessages);
+          return updatedMessages;
+        });
         setHasMoreMessages(data.messages.length === PAGE_SIZE)
       }
     } catch (error) {
@@ -97,9 +98,14 @@ export function useMessages({
         chatSessionId: currentSessionId,
         createdAt: new Date().toISOString()
       }
-      const updatedMessages = [...messages, userMessage]
-      setMessages(updatedMessages)
-      setCachedMessages(currentSessionId, updatedMessages)
+      const sessionId = currentSessionId; // Create a new variable to hold the non-null value
+      if (sessionId) {
+        setMessages(prevMessages => {
+          const updatedMessages = [...prevMessages, userMessage];
+          setCachedMessages(sessionId, updatedMessages);
+          return updatedMessages;
+        });
+      }
 
       // Send message to API
       const response = await fetchWithTimeout("/api/chat", {
@@ -128,9 +134,16 @@ export function useMessages({
         createdAt: new Date().toISOString()
       }
 
-      const finalMessages = [...updatedMessages, assistantMessage]
-      setMessages(finalMessages)
-      setCachedMessages(currentSessionId, finalMessages)
+      // Ensure we have a valid session ID before updating cache
+      // Ensure we have a valid session ID before updating cache
+      const sessionToUpdate = currentSessionId; // Use a different name for the temporary variable
+      if (sessionToUpdate) {
+        setMessages(prevMessages => {
+          const updatedMessages = [...prevMessages, assistantMessage];
+          setCachedMessages(sessionId, updatedMessages);
+          return updatedMessages;
+        });
+      }
 
       // Reset pagination
       currentPage.current = 0

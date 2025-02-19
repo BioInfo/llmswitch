@@ -154,17 +154,11 @@ export function ChatInterface() {
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end" className="w-40">
-                                <DropdownMenuItem onClick={() => {
-                                  console.log("Deleting session:", session.id);
-                                  handleDeleteSession(session.id);
-                                }}>
+                                <DropdownMenuItem onClick={() => handleDeleteSession(session.id)}>
                                   <Trash2 className="mr-2 h-4 w-4" />
                                   Delete
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => {
-                                  console.log("Renaming session:", session.id);
-                                  handleRenameSession(session.id);
-                                }}>
+                                <DropdownMenuItem onClick={() => handleRenameSession(session.id)}>
                                   <Pencil className="mr-2 h-4 w-4" />
                                   Rename
                                 </DropdownMenuItem>
